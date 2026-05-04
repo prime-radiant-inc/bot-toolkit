@@ -235,7 +235,10 @@ ANTHROPIC_API_KEY=sk-ant-...  # Required for API calls
 const options = {
   permissionMode: 'bypassPermissions',
   allowDangerouslySkipPermissions: true,
-  env: { ...process.env },
+  env: buildSdkEnv(process.env, {
+    ROOM_ID: 'native:session-id',
+    PLATFORM: 'native',
+  }),
   stderr: (msg) => logger.debug('SDK stderr', { msg }),
 };
 ```
@@ -287,10 +290,10 @@ for await (const message of query({ prompt, options })) {
 
 ```typescript
 const options = {
-  env: {
-    ...process.env,
-    DEBUG_CLAUDE_AGENT_SDK: 'true',
-  },
+  env: buildSdkEnv(process.env, {
+    ROOM_ID: 'native:session-id',
+    PLATFORM: 'native',
+  }),
   stderr: (msg) => console.error('[SDK]', msg),
 };
 ```

@@ -1,10 +1,6 @@
 // src/core/taskTools.ts
 
-import {
-  createSdkMcpServer,
-  type McpSdkServerConfigWithInstance,
-  tool,
-} from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { Logger } from '../utils/logger.js';
 import {
@@ -12,11 +8,27 @@ import {
   buildRecentTaskResponse,
   formatRunningFor,
 } from './taskRegistry.js';
+import type { BotToolkitMcpSdkServerConfigWithInstance } from './sdkTypes.js';
 import type { CancelResult, ITaskRegistry } from './taskRegistry.types.js';
 
 const logger = new Logger('TaskTools');
 
 const DEFAULT_CANCEL_TIMEOUT_MS = 15_000;
+
+type TaskToolContent = {
+  type: 'text';
+  text: string;
+};
+
+export interface BotToolkitTaskTool {
+  name: string;
+  handler(
+    args: Record<string, unknown>,
+    context: unknown,
+  ): Promise<{ content: TaskToolContent[] }>;
+}
+
+type SdkToolDefinitions = Parameters<typeof createSdkMcpServer>[0]['tools'];
 
 export interface TaskToolsOptions {
   /** Timeout in ms to await session promise during cancel. Default: 15000 */
@@ -32,7 +44,7 @@ export interface TaskToolsOptions {
 export function createTaskTools(
   registry: ITaskRegistry,
   options?: TaskToolsOptions,
-) {
+): BotToolkitTaskTool[] {
   const cancelTimeoutMs = options?.cancelTimeoutMs ?? DEFAULT_CANCEL_TIMEOUT_MS;
   const listActiveTasks = tool(
     'list_active_tasks',
@@ -78,7 +90,11 @@ export function createTaskTools(
     },
   );
 
-  return [listActiveTasks, listRecentTasks, cancelTask];
+  return [
+    listActiveTasks,
+    listRecentTasks,
+    cancelTask,
+  ] as unknown as BotToolkitTaskTool[];
 }
 
 /**
@@ -90,12 +106,12 @@ export function createTaskTools(
 export function createTaskToolsServer(
   registry: ITaskRegistry,
   options?: TaskToolsOptions,
-): McpSdkServerConfigWithInstance {
+): BotToolkitMcpSdkServerConfigWithInstance {
   const tools = createTaskTools(registry, options);
   return createSdkMcpServer({
     name: 'task-management',
-    tools,
-  });
+    tools: tools as unknown as SdkToolDefinitions,
+  }) as BotToolkitMcpSdkServerConfigWithInstance;
 }
 
 async function cancelTaskHandler(

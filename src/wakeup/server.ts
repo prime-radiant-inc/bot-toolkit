@@ -125,7 +125,7 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
 
   // Mount additional routes if provided (e.g., context routes)
   if (additionalRoutes) {
-    app.use(additionalRoutes);
+    app.use(...authMiddleware, additionalRoutes);
     logger.info('Additional routes mounted');
   }
 

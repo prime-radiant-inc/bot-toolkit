@@ -1,8 +1,7 @@
 // src/core/sessionManagerSDK.ts
 
 import {
-  type McpSdkServerConfigWithInstance,
-  type McpServerConfig,
+  type McpServerConfig as ClaudeMcpServerConfig,
   query,
   type SettingSource,
 } from '@anthropic-ai/claude-agent-sdk';
@@ -23,6 +22,10 @@ import {
   parseStderrLogLevel,
   resolveResponseText,
 } from './sessionManagerUtils.js';
+import type {
+  BotToolkitMcpSdkServerConfigWithInstance,
+  BotToolkitMcpServerConfig,
+} from './sdkTypes.js';
 import type {
   ISessionManager,
   Platform,
@@ -78,8 +81,8 @@ export function buildSdkEnv(
 export function buildMcpServers(
   enabledMcps: ResolvedMcp[],
   platformEnv: Record<string, string>,
-): Record<string, McpServerConfig> {
-  const mcpServers: Record<string, McpServerConfig> = {};
+): Record<string, BotToolkitMcpServerConfig> {
+  const mcpServers: Record<string, BotToolkitMcpServerConfig> = {};
   for (const mcp of enabledMcps) {
     if (mcp.type === 'stdio') {
       mcpServers[mcp.id] = {
@@ -100,12 +103,12 @@ export function buildMcpServers(
 
 export class ClaudeSessionManagerSDK implements ISessionManager {
   private configStore: ConfigStore;
-  private sdkServers: Record<string, McpSdkServerConfigWithInstance>;
+  private sdkServers: Record<string, BotToolkitMcpSdkServerConfigWithInstance>;
 
   constructor(
     private config: Config,
     private sessionStore: MessageSessionStore,
-    sdkServers?: Record<string, McpSdkServerConfigWithInstance>,
+    sdkServers?: Record<string, BotToolkitMcpSdkServerConfigWithInstance>,
   ) {
     const secretsReader = getSecretsReader(config.claude.configDir);
     this.configStore = new ConfigStore(config.claude.configDir, secretsReader);
@@ -178,10 +181,10 @@ export class ClaudeSessionManagerSDK implements ISessionManager {
     const platformEnv = buildPlatformEnv(roomId, platform);
 
     const enabledMcps = await this.configStore.getEnabledMcps();
-    const mcpServers: Record<string, McpServerConfig> = {
+    const mcpServers = {
       ...buildMcpServers(enabledMcps, platformEnv),
       ...this.sdkServers,
-    };
+    } as Record<string, ClaudeMcpServerConfig>;
 
     // Build plugins dynamically from config
     const enabledPlugins = this.configStore.getEnabledPlugins();

@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import express from 'express';
 import { describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { SessionDatabase } from '../../core/database.js';
@@ -116,6 +117,37 @@ describe('createWakeupServer', () => {
       await vi.waitFor(() => {
         expect(adapter.handleWakeup).toHaveBeenCalledTimes(1);
       });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('protects additional routes with bearer auth when auth token is configured', async () => {
+    const additionalRoutes = express.Router();
+    const handler = vi.fn((_req, res) => {
+      res.json({ status: 'extra-ok' });
+    });
+    additionalRoutes.get('/extra', handler);
+
+    const app = createWakeupServer({
+      adapters: new Map([['native', makeAdapter()]]),
+      authToken: 'secret-token',
+      additionalRoutes,
+    });
+
+    const server = await listen(app);
+    try {
+      const unauthenticated = await fetch(`${baseUrl(server)}/extra`);
+      expect(unauthenticated.status).toBe(401);
+      expect(await unauthenticated.json()).toEqual({ error: 'Unauthorized' });
+      expect(handler).not.toHaveBeenCalled();
+
+      const authenticated = await fetch(`${baseUrl(server)}/extra`, {
+        headers: { authorization: 'Bearer secret-token' },
+      });
+      expect(authenticated.status).toBe(200);
+      expect(await authenticated.json()).toEqual({ status: 'extra-ok' });
+      expect(handler).toHaveBeenCalledTimes(1);
     } finally {
       await close(server);
     }
