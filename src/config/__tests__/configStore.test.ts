@@ -406,7 +406,9 @@ describe('ConfigStore', () => {
             enabled: true,
             type: 'http',
             url: 'https://api.example.com/mcp',
-            headers: { Authorization: `Bearer ${templateRef('MISSING_TOKEN')}` },
+            headers: {
+              Authorization: `Bearer ${templateRef('MISSING_TOKEN')}`,
+            },
             envFrom: ['MISSING_TOKEN'],
           },
         },
@@ -767,9 +769,7 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       // envFrom value inserted directly, not template-resolved
-      expect(mcps[0].env.MY_SECRET).toBe(
-        templateRef('SHOULD_NOT_RESOLVE'),
-      );
+      expect(mcps[0].env.MY_SECRET).toBe(templateRef('SHOULD_NOT_RESOLVE'));
     });
   });
 
@@ -823,7 +823,9 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       const mcp = expectRemoteMcp(expectFirstMcp(mcps));
-      expect(mcp.url).toBe(`https://mcp.example.com/${templateRef('path')}/mcp`);
+      expect(mcp.url).toBe(
+        `https://mcp.example.com/${templateRef('path')}/mcp`,
+      );
     });
 
     it(`hyphenated secret name ${templateRef('MY-API-KEY')} matches correctly`, async () => {
