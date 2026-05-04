@@ -58,9 +58,9 @@ export function sanitizeRoomId(roomId: string): string {
  * Get the directory path for a room's Claude sessions.
  * Creates the directory and CLAUDE.md if they don't exist.
  *
- * @param baseDir - Base data directory (e.g., /data/matrix or /data/slack)
+ * @param baseDir - Base data directory (e.g., /data/slack)
  * @param roomId - Channel/room ID
- * @param platform - The platform this room belongs to (matrix, slack, native)
+ * @param platform - The platform this room belongs to (slack, native, email)
  * @param roomNameOrInfo - Either a simple room name string, or a RoomInfo object with full details
  */
 export function getRoomDirectory(
@@ -139,11 +139,6 @@ function createRoomsIndexClaudeMd(roomsDir: string, platform: Platform): void {
       idExample =
         'Email thread IDs are SHA-256 hashes of the Message-ID header, truncated to 16 chars';
       platformDescription = 'Email conversation sessions';
-      break;
-    default:
-      platformLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
-      idExample = 'Room IDs are sanitized for filesystem safety';
-      platformDescription = `${platformLabel} chat sessions`;
       break;
   }
 
@@ -303,10 +298,6 @@ function createRoomClaudeMd(roomDir: string, info: RoomInfo): void {
       break;
     case 'email':
       platformLabel = 'Email';
-      break;
-    default:
-      platformLabel =
-        info.platform.charAt(0).toUpperCase() + info.platform.slice(1);
       break;
   }
 

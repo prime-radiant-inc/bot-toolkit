@@ -1,6 +1,6 @@
 // src/core/types.ts
 
-export type Platform = 'matrix' | 'slack' | 'native' | 'email';
+export type Platform = 'slack' | 'native' | 'email';
 
 export type SenderRole = 'primary' | 'delegate';
 
@@ -55,7 +55,16 @@ export interface PlatformResponder {
   appendCancellationNotice(text: string): Promise<void>;
 }
 
+export interface MessageOrchestrator {
+  handleMessage(
+    message: IncomingMessage,
+    responder: PlatformResponder,
+  ): Promise<void>;
+}
+
 export interface PlatformAdapter {
+  readonly platform: Platform;
+
   start(): Promise<void>;
   stop(): Promise<void>;
   handleWakeup(channelId: string, payload: WakeupPayload): Promise<void>;

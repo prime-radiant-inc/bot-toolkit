@@ -64,6 +64,7 @@ export type {
   CompactionInfo,
   IncomingMessage,
   ISessionManager,
+  MessageOrchestrator,
   Platform,
   PlatformAdapter,
   PlatformResponder,

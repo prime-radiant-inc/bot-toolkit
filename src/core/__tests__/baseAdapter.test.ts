@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BaseAdapter } from '../baseAdapter.js';
-import type { ConversationOrchestrator } from '../orchestrator.js';
 import type {
   Attachment,
   IncomingMessage,
+  MessageOrchestrator,
+  PlatformResponder,
   SenderRole,
   WakeupPayload,
 } from '../types.js';
@@ -16,12 +17,18 @@ import { isDelegate } from '../delegateStore.js';
 
 const mockIsDelegate = vi.mocked(isDelegate);
 
+const testOrchestrator: MessageOrchestrator = {
+  async handleMessage(): Promise<void> {},
+};
+
 // Concrete implementation for testing
 class TestAdapter extends BaseAdapter {
-  public readonly platform = 'matrix' as const;
+  public readonly platform = 'slack' as const;
 
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
+  async stopListening(): Promise<void> {}
+  async sendRecoveryNotice(): Promise<void> {}
 
   async handleWakeup(
     _channelId: string,
@@ -84,7 +91,7 @@ describe('BaseAdapter', () => {
   describe('isAuthorized', () => {
     it('should allow all users when authorizedUsers is empty', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -94,7 +101,7 @@ describe('BaseAdapter', () => {
 
     it('should allow authorized users', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: ['user1', 'user2'],
         dataDir: '/tmp/test',
       });
@@ -105,7 +112,7 @@ describe('BaseAdapter', () => {
 
     it('should reject unauthorized users', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: ['user1'],
         dataDir: '/tmp/test',
       });
@@ -117,13 +124,13 @@ describe('BaseAdapter', () => {
       mockIsDelegate.mockReturnValue(true);
 
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: ['user1'],
         dataDir: '/tmp/test',
       });
 
       expect(adapter.testIsAuthorized('delegate-user')).toBe(true);
-      expect(mockIsDelegate).toHaveBeenCalledWith('delegate-user', 'matrix');
+      expect(mockIsDelegate).toHaveBeenCalledWith('delegate-user', 'slack');
     });
   });
 
@@ -132,33 +139,33 @@ describe('BaseAdapter', () => {
       mockIsDelegate.mockReturnValue(true);
 
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
 
       expect(adapter.testCheckIsDelegate('delegate-user')).toBe(true);
-      expect(mockIsDelegate).toHaveBeenCalledWith('delegate-user', 'matrix');
+      expect(mockIsDelegate).toHaveBeenCalledWith('delegate-user', 'slack');
     });
 
     it('should return false for non-delegates', () => {
       mockIsDelegate.mockReturnValue(false);
 
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
 
       expect(adapter.testCheckIsDelegate('regular-user')).toBe(false);
-      expect(mockIsDelegate).toHaveBeenCalledWith('regular-user', 'matrix');
+      expect(mockIsDelegate).toHaveBeenCalledWith('regular-user', 'slack');
     });
   });
 
   describe('buildIncomingMessage', () => {
     it('should build correct IncomingMessage', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -172,7 +179,7 @@ describe('BaseAdapter', () => {
         text: 'Hello',
       });
 
-      expect(message.platform).toBe('matrix');
+      expect(message.platform).toBe('slack');
       expect(message.channelId).toBe('C123');
       expect(message.channelName).toBe('general');
       expect(message.threadId).toBe('T456');
@@ -184,7 +191,7 @@ describe('BaseAdapter', () => {
 
     it('should include attachments when provided', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -221,7 +228,7 @@ describe('BaseAdapter', () => {
 
     it('should sanitize attachment originalName to prevent prompt injection', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -251,7 +258,7 @@ describe('BaseAdapter', () => {
 
     it('should include senderName when provided', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -271,7 +278,7 @@ describe('BaseAdapter', () => {
 
     it('should leave senderName undefined when not provided', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -290,7 +297,7 @@ describe('BaseAdapter', () => {
 
     it('should include senderRole when provided', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -310,7 +317,7 @@ describe('BaseAdapter', () => {
 
     it('should leave senderRole undefined when not provided', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -331,7 +338,7 @@ describe('BaseAdapter', () => {
   describe('sanitizeFilename', () => {
     it('should prepend timestamp and preserve safe characters', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -342,7 +349,7 @@ describe('BaseAdapter', () => {
 
     it('should replace spaces with underscores', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -353,7 +360,7 @@ describe('BaseAdapter', () => {
 
     it('should replace special characters with underscores', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -365,7 +372,7 @@ describe('BaseAdapter', () => {
 
     it('should handle unicode characters', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -380,7 +387,7 @@ describe('BaseAdapter', () => {
 
     it('should preserve hyphens and underscores', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -391,7 +398,7 @@ describe('BaseAdapter', () => {
 
     it('should handle empty filename', () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test',
       });
@@ -404,7 +411,7 @@ describe('BaseAdapter', () => {
   describe('downloadAttachment', () => {
     it('should create downloads directory and save file', async () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test-adapter',
       });
@@ -432,7 +439,7 @@ describe('BaseAdapter', () => {
 
     it('should return null on download failure', async () => {
       const adapter = new TestAdapter({
-        orchestrator: {} as ConversationOrchestrator,
+        orchestrator: testOrchestrator,
         authorizedUsers: [],
         dataDir: '/tmp/test-adapter',
       });
@@ -452,5 +459,66 @@ describe('BaseAdapter', () => {
 
       expect(attachment).toBeNull();
     });
+  });
+
+  it('accepts structural message orchestrators', async () => {
+    const handled: IncomingMessage[] = [];
+    const orchestrator: MessageOrchestrator = {
+      async handleMessage(message) {
+        handled.push(message);
+      },
+    };
+
+    class StructuralTestAdapter extends BaseAdapter {
+      readonly platform = 'slack' as const;
+
+      async start(): Promise<void> {}
+      async stop(): Promise<void> {}
+      async stopListening(): Promise<void> {}
+      async sendRecoveryNotice(): Promise<void> {}
+      async handleWakeup(): Promise<void> {}
+
+      protected async sendUnauthorizedResponse(): Promise<void> {}
+
+      async emit(): Promise<void> {
+        const message = this.buildIncomingMessage({
+          channelId: 'C123',
+          channelName: 'general',
+          threadId: null,
+          messageId: 'm1',
+          senderId: 'U123',
+          text: 'hello',
+        });
+        await this.orchestrator.handleMessage(message, testResponder);
+      }
+    }
+
+    const testResponder: PlatformResponder = {
+      cancelled: false,
+      async markProcessing() {},
+      async clearProcessing() {},
+      async markError() {},
+      async updateResponse() {},
+      async finalizeResponse() {},
+      async sendNotice() {},
+      async sendFile() {},
+      async setTyping() {},
+      async updateChannelStats() {},
+      async createThreadStarter() {
+        return 'thread-1';
+      },
+      async appendCancellationNotice() {},
+    };
+
+    const adapter = new StructuralTestAdapter({
+      orchestrator,
+      authorizedUsers: ['U123'],
+      dataDir: '/tmp/bot-toolkit-base-adapter-test',
+    });
+
+    await adapter.emit();
+
+    expect(handled).toHaveLength(1);
+    expect(handled[0]?.platform).toBe('slack');
   });
 });

@@ -5,10 +5,10 @@ import * as path from 'node:path';
 import { Logger } from '../utils/logger.js';
 import { sanitizeForPrompt } from '../utils/sanitize.js';
 import { isDelegate } from './delegateStore.js';
-import type { ConversationOrchestrator } from './orchestrator.js';
 import type {
   Attachment,
   IncomingMessage,
+  MessageOrchestrator,
   Platform,
   PlatformAdapter,
   SenderRole,
@@ -18,7 +18,7 @@ import type {
 const logger = new Logger('BaseAdapter');
 
 export interface BaseAdapterConfig {
-  orchestrator: ConversationOrchestrator;
+  orchestrator: MessageOrchestrator;
   authorizedUsers: string[];
   dataDir: string;
 }
@@ -28,7 +28,7 @@ export interface BaseAdapterConfig {
  * Provides common functionality for authorization, message building, and attachment handling.
  */
 export abstract class BaseAdapter implements PlatformAdapter {
-  protected orchestrator: ConversationOrchestrator;
+  protected orchestrator: MessageOrchestrator;
   protected authorizedUsers: string[];
   protected dataDir: string;
 
