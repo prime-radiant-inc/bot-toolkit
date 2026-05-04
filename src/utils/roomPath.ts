@@ -54,6 +54,16 @@ export function sanitizeRoomId(roomId: string): string {
     .substring(0, 100); // Limit length
 }
 
+function sanitizeRoomIdOrThrow(roomId: string): string {
+  const sanitized = sanitizeRoomId(roomId);
+  if (sanitized.length === 0) {
+    throw new Error(
+      'Room ID must contain at least one filesystem-safe character',
+    );
+  }
+  return sanitized;
+}
+
 /**
  * Get the directory path for a room's Claude sessions.
  * Creates the directory and CLAUDE.md if they don't exist.
@@ -69,7 +79,7 @@ export function getRoomDirectory(
   platform: Platform,
   roomNameOrInfo?: string | RoomInfo,
 ): string {
-  const sanitized = sanitizeRoomId(roomId);
+  const sanitized = sanitizeRoomIdOrThrow(roomId);
   // Structure: {baseDir}/rooms/{platform}/{room-id}/
   const roomsDir = path.join(baseDir, 'rooms', platform);
   const roomDir = path.join(roomsDir, sanitized);

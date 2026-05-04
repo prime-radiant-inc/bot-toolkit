@@ -3,9 +3,9 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getRoomDirectory, sanitizeRoomId } from '../roomPath.js';
 
-describe('getRoomDirectory', () => {
-  const testBaseDir = '/tmp/test-room-path';
+const testBaseDir = '/tmp/test-room-path';
 
+describe('getRoomDirectory', () => {
   beforeEach(() => {
     // Clean up before each test
     if (fs.existsSync(testBaseDir)) {
@@ -34,17 +34,17 @@ describe('getRoomDirectory', () => {
     expect(metadata.platform).toBe('native');
   });
 
-  it('should use explicit platform for Matrix rooms', () => {
+  it('should use explicit platform for email rooms', () => {
     const roomDir = getRoomDirectory(
       testBaseDir,
-      '!abc:matrix.org',
-      'matrix',
-      'Test Room',
+      'email-thread-abc123',
+      'email',
+      'Email Thread',
     );
     const metadataPath = path.join(roomDir, 'metadata.json');
 
     const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-    expect(metadata.platform).toBe('matrix');
+    expect(metadata.platform).toBe('email');
   });
 
   it('should use explicit platform for Slack rooms', () => {
@@ -75,9 +75,9 @@ describe('getRoomDirectory', () => {
 });
 
 describe('sanitizeRoomId', () => {
-  it('should sanitize Matrix room IDs', () => {
-    expect(sanitizeRoomId('!abc123XYZ:matrix.org')).toBe(
-      'abc123xyz_matrix.org',
+  it('should sanitize IDs with leading bang and colon delimiters', () => {
+    expect(sanitizeRoomId('!abc123XYZ:legacy.org')).toBe(
+      'abc123xyz_legacy.org',
     );
   });
 
@@ -87,6 +87,12 @@ describe('sanitizeRoomId', () => {
 
   it('should handle native session IDs', () => {
     expect(sanitizeRoomId('native-session-123')).toBe('native-session-123');
+  });
+
+  it('throws when room ID sanitizes to empty', () => {
+    expect(() =>
+      getRoomDirectory(testBaseDir, '!!!', 'native', 'Invalid Room'),
+    ).toThrow('Room ID must contain at least one filesystem-safe character');
   });
 });
 
@@ -124,13 +130,14 @@ describe('rooms index CLAUDE.md', () => {
     expect(content).toContain('Slack Rooms Directory');
   });
 
-  it('should create Matrix-specific rooms index', () => {
-    getRoomDirectory(testBaseDir, '!abc:matrix.org', 'matrix', 'Test Room');
+  it('should create email-specific rooms index', () => {
+    getRoomDirectory(testBaseDir, 'thread-abc123', 'email', 'Email Thread');
     const content = fs.readFileSync(
-      path.join(testBaseDir, 'rooms', 'matrix', 'CLAUDE.md'),
+      path.join(testBaseDir, 'rooms', 'email', 'CLAUDE.md'),
       'utf-8',
     );
-    expect(content).toContain('Matrix Rooms Directory');
+    expect(content).toContain('Email Rooms Directory');
+    expect(content).toContain('Email conversation sessions');
   });
 });
 

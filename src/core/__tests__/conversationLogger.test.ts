@@ -27,7 +27,7 @@ describe('ConversationLogger', () => {
   describe('logIncoming', () => {
     it('should log main channel message to main.md and main.jsonl', async () => {
       await logger.logIncoming({
-        platform: 'matrix',
+        platform: 'slack',
         channelId: 'room123',
         channelName: 'general',
         threadId: null,
@@ -35,14 +35,14 @@ describe('ConversationLogger', () => {
         senderId: 'user_alice',
         senderName: 'Alice',
         text: 'Hello everyone!',
-        rawEvent: { type: 'm.room.message', sender: '@alice:matrix.org' },
+        rawEvent: { type: 'message', user: 'user_alice' },
       });
 
       const dateStr = new Date().toISOString().split('T')[0];
       const channelDir = path.join(
         TEST_DIR,
         'rooms',
-        'matrix',
+        'slack',
         'room123',
         'chat-history',
         dateStr,
@@ -62,7 +62,7 @@ describe('ConversationLogger', () => {
       const entry = JSON.parse(jsonlContent.trim());
       expect(entry.direction).toBe('in');
       expect(entry.message.text).toBe('Hello everyone!');
-      expect(entry.rawEvent.type).toBe('m.room.message');
+      expect(entry.rawEvent.type).toBe('message');
     });
 
     it('should log thread message to thread-specific files', async () => {
@@ -104,7 +104,7 @@ describe('ConversationLogger', () => {
   describe('logOutgoing', () => {
     it('should log outgoing message to thread files', async () => {
       await logger.logOutgoing({
-        platform: 'matrix',
+        platform: 'email',
         channelId: 'room123',
         channelName: 'general',
         threadId: 'thread_001',
@@ -117,7 +117,7 @@ describe('ConversationLogger', () => {
       const channelDir = path.join(
         TEST_DIR,
         'rooms',
-        'matrix',
+        'email',
         'room123',
         'chat-history',
         dateStr,
@@ -136,6 +136,44 @@ describe('ConversationLogger', () => {
       const entry = JSON.parse(jsonlContent.trim());
       expect(entry.direction).toBe('out');
       expect(entry.action).toBe('send');
+    });
+
+    it('sanitizes thread IDs before using them as log filenames', async () => {
+      await logger.logIncoming({
+        platform: 'slack',
+        channelId: 'C123',
+        channelName: 'general',
+        threadId: '../outside',
+        messageId: 'm1',
+        senderId: 'U123',
+        senderName: 'Drew',
+        text: 'hello',
+        rawEvent: {},
+      });
+
+      const expected = path.join(
+        TEST_DIR,
+        'rooms',
+        'slack',
+        'c123',
+        'chat-history',
+      );
+      const dateDirs = fs.readdirSync(expected);
+      expect(dateDirs).toHaveLength(1);
+      const files = fs.readdirSync(path.join(expected, dateDirs[0] ?? ''));
+      expect(files).toContain('outside.md');
+      expect(files).toContain('outside.jsonl');
+      expect(
+        fs.existsSync(path.join(TEST_DIR, 'rooms', 'slack', 'outside.md')),
+      ).toBe(false);
+
+      const messages = await logger.getThreadContext(
+        'slack',
+        'C123',
+        '../outside',
+      );
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.text).toBe('hello');
     });
   });
 });

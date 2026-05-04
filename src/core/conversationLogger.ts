@@ -7,6 +7,14 @@ import type { Platform } from './types.js';
 
 const logger = new Logger('ConversationLogger');
 
+function sanitizeLogFileBase(value: string): string {
+  const sanitized = sanitizeRoomId(value);
+  if (sanitized.length === 0) {
+    return 'main';
+  }
+  return sanitized;
+}
+
 export interface StoredMessage {
   role: 'user' | 'assistant';
   senderId?: string;
@@ -77,7 +85,9 @@ export class ConversationLogger {
    * Log an incoming message from a user.
    */
   async logIncoming(entry: IncomingLogEntry): Promise<void> {
-    const fileBase = entry.threadId ?? 'main';
+    const fileBase = entry.threadId
+      ? sanitizeLogFileBase(entry.threadId)
+      : 'main';
 
     try {
       const dir = this.ensureDir(entry.platform, entry.channelId);
@@ -125,7 +135,9 @@ export class ConversationLogger {
    * Log an outgoing message from the bot.
    */
   async logOutgoing(entry: OutgoingLogEntry): Promise<void> {
-    const fileBase = entry.threadId ?? 'main';
+    const fileBase = entry.threadId
+      ? sanitizeLogFileBase(entry.threadId)
+      : 'main';
 
     try {
       const dir = this.ensureDir(entry.platform, entry.channelId);
@@ -229,7 +241,10 @@ export class ConversationLogger {
     const dateDirs = this.getDateDirs(channelDir);
 
     for (const dateDir of dateDirs) {
-      const jsonlFile = path.join(dateDir, `${threadId}.jsonl`);
+      const jsonlFile = path.join(
+        dateDir,
+        `${sanitizeLogFileBase(threadId)}.jsonl`,
+      );
       if (fs.existsSync(jsonlFile)) {
         const messages = this.parseJsonlFile(jsonlFile);
         allMessages.push(...messages);
