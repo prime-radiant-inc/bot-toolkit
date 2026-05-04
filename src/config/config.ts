@@ -2,8 +2,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as dotenv from 'dotenv';
 
-dotenv.config();
-
 export interface Config {
   claude: {
     paDirectory: string;
@@ -18,6 +16,8 @@ export interface Config {
 }
 
 export function loadConfig(): Config {
+  dotenv.config();
+
   const databasePath =
     process.env.DATABASE_PATH || './data/infrastructure/sessions.db';
   // Data directory is explicitly set or derived from DATABASE_PATH

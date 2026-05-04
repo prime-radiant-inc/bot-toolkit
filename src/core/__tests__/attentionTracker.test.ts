@@ -581,18 +581,13 @@ describe('AttentionTracker', () => {
     it('should only remove timed-out threads, keeping active ones', () => {
       const tracker = new AttentionTracker(db, {
         trackActiveThreads: true,
-        threadTimeout: 10, // 10ms
+        threadTimeout: 10_000,
       });
 
       tracker.engage('old-thread', 'C123');
-
-      // Wait for old-thread to time out
-      const start = Date.now();
-      while (Date.now() - start < 15) {
-        // busy-wait
-      }
-
-      // Engage a new thread after the wait
+      db.prepare(
+        'UPDATE active_threads SET last_activity = ? WHERE thread_id = ?',
+      ).run(Date.now() - 20_000, 'old-thread');
       tracker.engage('new-thread', 'C123');
 
       const cleaned = tracker.cleanupTimedOutThreads();

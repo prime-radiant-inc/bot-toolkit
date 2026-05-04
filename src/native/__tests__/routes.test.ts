@@ -79,6 +79,24 @@ describe('createNativeRoutes', () => {
     });
   });
 
+  it('rejects native room slugs that sanitize to empty', async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(createNativeRoutes(manager));
+    server = await listen(app);
+
+    const response = await fetch(`${baseUrl(server)}/rooms`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ slug: '!!!', name: 'Room' }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'slug must contain at least one filesystem-safe character',
+    });
+  });
+
   it('rejects non-string native room payloads', async () => {
     const app = express();
     app.use(express.json());

@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 import { Logger } from '../utils/logger.js';
-import { getRoomDirectory } from '../utils/roomPath.js';
+import { getRoomDirectory, sanitizeRoomId } from '../utils/roomPath.js';
 import type { NativeSessionManager } from './sessionManager.js';
 
 const logger = new Logger('NativeRoutes');
@@ -87,6 +87,12 @@ export function createNativeRoutes(
       }
       if (slug.trim().length === 0 || name.trim().length === 0) {
         res.status(400).json({ error: 'slug and name cannot be empty' });
+        return;
+      }
+      if (sanitizeRoomId(slug).length === 0) {
+        res.status(400).json({
+          error: 'slug must contain at least one filesystem-safe character',
+        });
         return;
       }
 
