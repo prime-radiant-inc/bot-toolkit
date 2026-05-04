@@ -1,0 +1,40 @@
+{
+  "name": "@primeradiant/bot-toolkit",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "@aws-sdk/client-ssm": "^3.971.0",
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^5.0.0",
+    "express-ws": "^5.0.2",
+    "gray-matter": "^4.0.3",
+    "ws": "^8.19.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/express": "^5.0.0",
+    "@types/express-ws": "^3.0.6",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.9"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.0"
+  }
+}
