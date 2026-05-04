@@ -28,3 +28,20 @@ export type BotToolkitMcpServerConfig =
   | BotToolkitMcpSseServerConfig
   | BotToolkitMcpHttpServerConfig
   | BotToolkitMcpSdkServerConfigWithInstance;
+
+export type BotToolkitToolContent = {
+  type: 'text';
+  text: string;
+};
+
+export type BotToolkitTaskToolHandler = (
+  args: Record<string, unknown>,
+  context: unknown,
+) => Promise<{ content: BotToolkitToolContent[] }>;
+
+export type BotToolkitToolInputSchema = Record<string, unknown>;
+
+export interface BotToolkitTaskTool {
+  name: string;
+  handler: BotToolkitTaskToolHandler;
+}

@@ -1,10 +1,5 @@
 // src/core/sessionManagerSDK.ts
 
-import {
-  type McpServerConfig as ClaudeMcpServerConfig,
-  query,
-  type SettingSource,
-} from '@anthropic-ai/claude-agent-sdk';
 import type { Config } from '../config/config.js';
 import { ConfigStore } from '../config/configStore.js';
 import type { ResolvedMcp } from '../config/configTypes.js';
@@ -22,6 +17,7 @@ import {
   parseStderrLogLevel,
   resolveResponseText,
 } from './sessionManagerUtils.js';
+import { queryClaude, toClaudeMcpServers } from './claudeSdkBoundary.js';
 import type {
   BotToolkitMcpSdkServerConfigWithInstance,
   BotToolkitMcpServerConfig,
@@ -181,10 +177,10 @@ export class ClaudeSessionManagerSDK implements ISessionManager {
     const platformEnv = buildPlatformEnv(roomId, platform);
 
     const enabledMcps = await this.configStore.getEnabledMcps();
-    const mcpServers = {
+    const mcpServers = toClaudeMcpServers({
       ...buildMcpServers(enabledMcps, platformEnv),
       ...this.sdkServers,
-    } as Record<string, ClaudeMcpServerConfig>;
+    });
 
     // Build plugins dynamically from config
     const enabledPlugins = this.configStore.getEnabledPlugins();
@@ -209,7 +205,7 @@ export class ClaudeSessionManagerSDK implements ISessionManager {
       plugins,
       // Load settings from user (~/.claude/) and project (.claude/) directories
       // Required for skill discovery from ~/.claude/skills/ (personal skills)
-      settingSources: ['user', 'project'] as SettingSource[],
+      settingSources: ['user', 'project'],
       includePartialMessages: true,
       env: buildSdkEnv(process.env, platformEnv),
       // Capture stderr from Claude Code process for debugging
@@ -239,7 +235,7 @@ export class ClaudeSessionManagerSDK implements ISessionManager {
     let currentText = '';
 
     // Store query object so we can call close() in finally block
-    const queryObj = query({ prompt: userMessage, options: queryOptions });
+    const queryObj = queryClaude(userMessage, queryOptions);
 
     try {
       for await (const message of queryObj) {

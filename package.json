@@ -21,12 +21,13 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint . && node scripts/check-console.mjs",
+    "check:public-types": "node scripts/check-public-types.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest --run",
     "build": "tsc",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run pack:dry-run"
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run check:public-types && npm run pack:dry-run"
   },
   "keywords": [
     "claude",

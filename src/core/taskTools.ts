@@ -1,34 +1,23 @@
-// src/core/taskTools.ts
-
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { Logger } from '../utils/logger.js';
+import {
+  createBotToolkitSdkMcpServer,
+  createBotToolkitTool,
+} from './claudeSdkBoundary.js';
 import {
   buildActiveTaskResponse,
   buildRecentTaskResponse,
   formatRunningFor,
 } from './taskRegistry.js';
-import type { BotToolkitMcpSdkServerConfigWithInstance } from './sdkTypes.js';
+import type {
+  BotToolkitMcpSdkServerConfigWithInstance,
+  BotToolkitTaskTool,
+} from './sdkTypes.js';
 import type { CancelResult, ITaskRegistry } from './taskRegistry.types.js';
 
 const logger = new Logger('TaskTools');
 
 const DEFAULT_CANCEL_TIMEOUT_MS = 15_000;
-
-type TaskToolContent = {
-  type: 'text';
-  text: string;
-};
-
-export interface BotToolkitTaskTool {
-  name: string;
-  handler(
-    args: Record<string, unknown>,
-    context: unknown,
-  ): Promise<{ content: TaskToolContent[] }>;
-}
-
-type SdkToolDefinitions = Parameters<typeof createSdkMcpServer>[0]['tools'];
 
 export interface TaskToolsOptions {
   /** Timeout in ms to await session promise during cancel. Default: 15000 */
@@ -46,7 +35,7 @@ export function createTaskTools(
   options?: TaskToolsOptions,
 ): BotToolkitTaskTool[] {
   const cancelTimeoutMs = options?.cancelTimeoutMs ?? DEFAULT_CANCEL_TIMEOUT_MS;
-  const listActiveTasks = tool(
+  const listActiveTasks = createBotToolkitTool(
     'list_active_tasks',
     'List all currently active (in-progress) tasks across all rooms and platforms. Returns task IDs, room, prompt preview, and how long each task has been running.',
     {},
@@ -59,12 +48,12 @@ export function createTaskTools(
     },
   );
 
-  const listRecentTasks = tool(
+  const listRecentTasks = createBotToolkitTool(
     'list_recent_tasks',
     'List recently completed, cancelled, or errored tasks. Returns task IDs, status, duration, token usage, and cost. Useful for understanding recent activity and costs.',
     { hours: z.number().optional() },
     async (args) => {
-      const hours = Math.min(args.hours ?? 24, 168);
+      const hours = Math.min(optionalNumberArg(args, 'hours', 24), 168);
       const rows = registry.getRecent(hours);
       const response = buildRecentTaskResponse(rows);
       return {
@@ -73,12 +62,12 @@ export function createTaskTools(
     },
   );
 
-  const cancelTask = tool(
+  const cancelTask = createBotToolkitTool(
     'cancel_task',
     'Cancel an active task by session ID. Always confirm with the user before cancelling. Never cancel a task in the thread you are currently responding to. If the result is "starting_up", tell the user to try again in a moment.',
     { session_id: z.string() },
     async (args) => {
-      const { session_id: sessionId } = args;
+      const sessionId = stringArg(args, 'session_id');
       const result = await cancelTaskHandler(
         registry,
         sessionId,
@@ -90,11 +79,30 @@ export function createTaskTools(
     },
   );
 
-  return [
-    listActiveTasks,
-    listRecentTasks,
-    cancelTask,
-  ] as unknown as BotToolkitTaskTool[];
+  return [listActiveTasks, listRecentTasks, cancelTask];
+}
+
+function optionalNumberArg(
+  args: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  const value = args[key];
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== 'number') {
+    throw new TypeError(`Expected ${key} to be a number.`);
+  }
+  return value;
+}
+
+function stringArg(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  if (typeof value !== 'string') {
+    throw new TypeError(`Expected ${key} to be a string.`);
+  }
+  return value;
 }
 
 /**
@@ -108,10 +116,7 @@ export function createTaskToolsServer(
   options?: TaskToolsOptions,
 ): BotToolkitMcpSdkServerConfigWithInstance {
   const tools = createTaskTools(registry, options);
-  return createSdkMcpServer({
-    name: 'task-management',
-    tools: tools as unknown as SdkToolDefinitions,
-  }) as BotToolkitMcpSdkServerConfigWithInstance;
+  return createBotToolkitSdkMcpServer('task-management', tools);
 }
 
 async function cancelTaskHandler(

@@ -42,6 +42,10 @@ export type {
   BotToolkitMcpServerConfig,
   BotToolkitMcpSseServerConfig,
   BotToolkitMcpStdioServerConfig,
+  BotToolkitTaskTool,
+  BotToolkitTaskToolHandler,
+  BotToolkitToolContent,
+  BotToolkitToolInputSchema,
 } from './sdkTypes.js';
 export {
   buildActiveTaskResponse,
@@ -63,7 +67,7 @@ export type {
   TaskRegistryEntry,
   TaskStatus,
 } from './taskRegistry.types.js';
-export type { BotToolkitTaskTool, TaskToolsOptions } from './taskTools.js';
+export type { TaskToolsOptions } from './taskTools.js';
 export { createTaskTools, createTaskToolsServer } from './taskTools.js';
 // Types
 export type {
