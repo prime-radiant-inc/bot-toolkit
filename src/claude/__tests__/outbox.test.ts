@@ -134,4 +134,34 @@ describe('processOutbox', () => {
       'top-level.txt',
     );
   });
+
+  it('should skip symlinked files in outbox', async () => {
+    fs.mkdirSync(outboxDir);
+    const outsideFile = path.join(roomDir, 'outside-secret.txt');
+    const linkPath = path.join(outboxDir, 'secret.txt');
+    fs.writeFileSync(outsideFile, 'secret');
+    fs.symlinkSync(outsideFile, linkPath);
+
+    const sendFile = vi.fn();
+    await processOutbox(roomDir, sendFile);
+
+    expect(sendFile).not.toHaveBeenCalled();
+    expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(sentDir)).toBe(false);
+  });
+
+  it('should skip hard-linked files in outbox', async () => {
+    fs.mkdirSync(outboxDir);
+    const outsideFile = path.join(roomDir, 'outside-hardlink-source.txt');
+    const hardLinkPath = path.join(outboxDir, 'hardlink.txt');
+    fs.writeFileSync(outsideFile, 'secret');
+    fs.linkSync(outsideFile, hardLinkPath);
+
+    const sendFile = vi.fn();
+    await processOutbox(roomDir, sendFile);
+
+    expect(sendFile).not.toHaveBeenCalled();
+    expect(fs.existsSync(hardLinkPath)).toBe(true);
+    expect(fs.existsSync(sentDir)).toBe(false);
+  });
 });

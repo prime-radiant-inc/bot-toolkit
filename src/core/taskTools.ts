@@ -25,10 +25,10 @@ export interface TaskToolsOptions {
 }
 
 /**
- * Create task management tool definitions for the Claude Agent SDK.
+ * Create bot-toolkit task management tool definitions.
  *
- * Returns an array of SdkMcpToolDefinition objects that can be passed
- * to `createSdkMcpServer({ tools: ... })`.
+ * Most consumers should use `createTaskToolsServer()` instead and pass the
+ * returned server config to `ClaudeSessionManagerSDK`.
  */
 export function createTaskTools(
   registry: ITaskRegistry,
@@ -108,8 +108,8 @@ function stringArg(args: Record<string, unknown>, key: string): string {
 /**
  * Create an in-process SDK MCP server with task management tools.
  *
- * The returned value can be merged directly into the `mcpServers` dict
- * passed to the Claude Agent SDK's `query()` function.
+ * Pass the returned server config to `ClaudeSessionManagerSDK` via its
+ * `sdkServers` constructor argument.
  */
 export function createTaskToolsServer(
   registry: ITaskRegistry,

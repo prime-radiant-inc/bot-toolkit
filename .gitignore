@@ -3,6 +3,7 @@ dist/
 coverage/
 *.tgz
 .tmp/
+docs/superpowers/
 *.log
 .DS_Store
 .env

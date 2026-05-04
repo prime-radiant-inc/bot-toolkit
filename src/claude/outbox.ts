@@ -25,11 +25,7 @@ export async function processOutbox(
 
   // Get files in outbox (excluding directories and sent/)
   const entries = fs.readdirSync(outboxDir);
-  const files = entries.filter((name) => {
-    if (name === 'sent') return false;
-    const filePath = path.join(outboxDir, name);
-    return fs.statSync(filePath).isFile();
-  });
+  const files = entries.filter((name) => isSafeOutboxFile(outboxDir, name));
 
   if (files.length === 0) {
     return;
@@ -55,4 +51,12 @@ export async function processOutbox(
       // Continue with other files even if one fails
     }
   }
+}
+
+function isSafeOutboxFile(outboxDir: string, name: string): boolean {
+  if (name === 'sent') return false;
+
+  const filePath = path.join(outboxDir, name);
+  const stat = fs.lstatSync(filePath);
+  return stat.isFile() && stat.nlink === 1;
 }

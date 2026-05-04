@@ -58,6 +58,31 @@ These identifiers are used by core APIs for room paths, wakeups, task rows,
 environment setup, and adapter interfaces. They are not claims that this package
 exports a bundled `SlackAdapter` or `EmailAdapter`.
 
+## Task Tools
+
+`createTaskToolsServer()` exposes toolkit task inspection/cancellation tools to
+Claude through `ClaudeSessionManagerSDK`:
+
+```ts
+import {
+  ClaudeSessionManagerSDK,
+  MessageSessionStore,
+  SessionDatabase,
+  TaskRegistry,
+  createTaskToolsServer,
+  loadConfig,
+} from '@primeradiant/bot-toolkit';
+
+const config = loadConfig();
+const database = new SessionDatabase(config.database.path);
+const sessionStore = new MessageSessionStore(database.db);
+const taskRegistry = new TaskRegistry(database.db);
+
+const sessionManager = new ClaudeSessionManagerSDK(config, sessionStore, {
+  taskManagement: createTaskToolsServer(taskRegistry),
+});
+```
+
 ## Adapter Boundary
 
 Applications should implement concrete platform adapters in their own packages:
