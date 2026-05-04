@@ -8,25 +8,28 @@ import {
 } from '../sessionManagerUtils.js';
 
 describe('buildPlatformEnv', () => {
-  it('should always include MATRIX_ROOM_ID', () => {
-    const env = buildPlatformEnv('room-123', 'matrix');
-    expect(env.MATRIX_ROOM_ID).toBe('room-123');
+  it('should always include generic room and platform variables', () => {
+    const env = buildPlatformEnv('room-123', 'email');
+    expect(env.ROOM_ID).toBe('email:room-123');
+    expect(env.PLATFORM).toBe('email');
   });
 
   it('should include NATIVE_SESSION_ID for native platform', () => {
     const env = buildPlatformEnv('native-session-abc', 'native');
-    expect(env.MATRIX_ROOM_ID).toBe('native-session-abc');
+    expect(env.ROOM_ID).toBe('native:native-session-abc');
+    expect(env.PLATFORM).toBe('native');
     expect(env.NATIVE_SESSION_ID).toBe('native-session-abc');
   });
 
   it('should include SLACK_CHANNEL_ID for slack platform', () => {
     const env = buildPlatformEnv('C0123SLACK', 'slack');
-    expect(env.MATRIX_ROOM_ID).toBe('C0123SLACK');
+    expect(env.ROOM_ID).toBe('slack:C0123SLACK');
+    expect(env.PLATFORM).toBe('slack');
     expect(env.SLACK_CHANNEL_ID).toBe('C0123SLACK');
   });
 
-  it('should not include NATIVE_SESSION_ID for matrix platform', () => {
-    const env = buildPlatformEnv('!room:example.com', 'matrix');
+  it('should not include platform-specific vars for email platform', () => {
+    const env = buildPlatformEnv('inbox-thread', 'email');
     expect(env.NATIVE_SESSION_ID).toBeUndefined();
     expect(env.SLACK_CHANNEL_ID).toBeUndefined();
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResolvedMcp } from '../../config/configTypes.js';
-import { buildMcpServers } from '../sessionManagerSDK.js';
+import { buildMcpServers, buildSdkEnv } from '../sessionManagerSDK.js';
 
 interface UnknownResolvedMcp {
   id: string;
@@ -10,8 +10,8 @@ interface UnknownResolvedMcp {
 
 describe('buildMcpServers', () => {
   const platformEnv = {
-    ROOM_ID: 'matrix:!room:server.com',
-    PLATFORM: 'matrix',
+    ROOM_ID: 'native:room',
+    PLATFORM: 'native',
   };
 
   it('stdio MCP produces { command, args, env } shape (no type field)', () => {
@@ -144,5 +144,40 @@ describe('buildMcpServers', () => {
     );
 
     expect(Object.keys(result)).toHaveLength(0);
+  });
+});
+
+describe('buildSdkEnv', () => {
+  it('includes platform env and debug flag while excluding broad host secrets', () => {
+    const env = buildSdkEnv(
+      {
+        PATH: '/usr/bin',
+        HOME: '/home/bot',
+        AWS_SECRET_ACCESS_KEY: 'do-not-pass',
+        GITHUB_TOKEN: 'do-not-pass',
+        LINEAR_API_KEY: 'do-not-pass',
+        ANTHROPIC_API_KEY: 'anthropic-key',
+      },
+      { ROOM_ID: 'native:abc', PLATFORM: 'native' },
+    );
+
+    expect(env).toEqual({
+      PATH: '/usr/bin',
+      HOME: '/home/bot',
+      ANTHROPIC_API_KEY: 'anthropic-key',
+      ROOM_ID: 'native:abc',
+      PLATFORM: 'native',
+      DEBUG_CLAUDE_AGENT_SDK: 'true',
+    });
+  });
+
+  it('omits undefined allowlisted variables', () => {
+    const env = buildSdkEnv({}, { ROOM_ID: 'email:inbox', PLATFORM: 'email' });
+
+    expect(env).toEqual({
+      ROOM_ID: 'email:inbox',
+      PLATFORM: 'email',
+      DEBUG_CLAUDE_AGENT_SDK: 'true',
+    });
   });
 });

@@ -11,7 +11,8 @@ export function buildPlatformEnv(
   platform: Platform,
 ): Record<string, string> {
   return {
-    MATRIX_ROOM_ID: roomId,
+    ROOM_ID: `${platform}:${roomId}`,
+    PLATFORM: platform,
     ...(platform === 'native' ? { NATIVE_SESSION_ID: roomId } : {}),
     ...(platform === 'slack' ? { SLACK_CHANNEL_ID: roomId } : {}),
   };

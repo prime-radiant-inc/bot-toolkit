@@ -33,6 +33,44 @@ import type {
 
 const logger = new Logger('ClaudeSessionManagerSDK');
 
+const SDK_ENV_ALLOWLIST = [
+  'PATH',
+  'HOME',
+  'SHELL',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  'USER',
+  'LOGNAME',
+  'LANG',
+  'LC_ALL',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+] as const;
+
+export function buildSdkEnv(
+  sourceEnv: NodeJS.ProcessEnv,
+  platformEnv: Record<string, string>,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  for (const key of SDK_ENV_ALLOWLIST) {
+    const value = sourceEnv[key];
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+
+  return {
+    ...env,
+    ...platformEnv,
+    DEBUG_CLAUDE_AGENT_SDK: 'true',
+  };
+}
+
 /**
  * Build SDK-compatible mcpServers dict from resolved MCP configs.
  * Stdio MCPs get platformEnv merged into env; remote MCPs pass through as-is.
@@ -170,12 +208,7 @@ export class ClaudeSessionManagerSDK implements ISessionManager {
       // Required for skill discovery from ~/.claude/skills/ (personal skills)
       settingSources: ['user', 'project'] as SettingSource[],
       includePartialMessages: true,
-      env: {
-        ...process.env,
-        ...platformEnv,
-        // Enable stderr capture for debugging process crashes
-        DEBUG_CLAUDE_AGENT_SDK: 'true',
-      },
+      env: buildSdkEnv(process.env, platformEnv),
       // Capture stderr from Claude Code process for debugging
       stderr: (message: string) => {
         const level = parseStderrLogLevel(message);
