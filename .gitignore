@@ -1,5 +1,8 @@
 node_modules/
 dist/
+coverage/
+*.tgz
+.tmp/
 *.log
 .DS_Store
 .env

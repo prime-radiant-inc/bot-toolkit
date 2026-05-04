@@ -1,6 +1,7 @@
 {
   "name": "@primeradiant/bot-toolkit",
   "version": "0.1.0",
+  "description": "Reusable TypeScript core for building unattended Claude-powered chat agents.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,13 +11,52 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
   "scripts": {
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint . && node scripts/check-console.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --run",
     "build": "tsc",
-    "test": "vitest --run"
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run pack:dry-run"
+  },
+  "keywords": [
+    "claude",
+    "chatbot",
+    "bot",
+    "agent",
+    "typescript",
+    "native"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prime-radiant-inc/bot-toolkit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/prime-radiant-inc/bot-toolkit/issues"
+  },
+  "homepage": "https://github.com/prime-radiant-inc/bot-toolkit#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.0",
     "@aws-sdk/client-ssm": "^3.971.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/express": "^5.0.0",
+    "@types/ws": "^8.18.1",
     "better-sqlite3": "^11.0.0",
     "dotenv": "^16.4.0",
     "express": "^5.0.0",
@@ -26,15 +66,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0",
-    "@types/express": "^5.0.0",
+    "@biomejs/biome": "^2.2.0",
     "@types/express-ws": "^3.0.6",
     "@types/node": "^20.0.0",
-    "@types/ws": "^8.18.1",
     "typescript": "^5.0.0",
     "vitest": "^2.1.9"
-  },
-  "peerDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.0"
   }
 }
