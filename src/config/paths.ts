@@ -1,5 +1,5 @@
 // src/config/paths.ts
-// Centralized path configuration for claude-pa-matrix-bot
+// Centralized path configuration for unattended chat agents.
 // Paths are derived from environment variables with backwards-compatible defaults
 
 // Base paths from environment (with backwards-compatible defaults)
@@ -20,7 +20,6 @@ export const paths = {
     browserSessions: `${PA_DATA}/browser-sessions`,
     wiki: `${PA_DATA}/wiki`,
     conduit: `${PA_DATA}/conduit`,
-    matrixSync: `${PA_DATA}/matrix-sync.json`,
   },
   scheduler: {
     root: SCHEDULER_DATA,

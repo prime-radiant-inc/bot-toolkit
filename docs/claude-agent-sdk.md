@@ -47,7 +47,7 @@ const options = {
   resume: 'session-uuid',  // Resume an existing session
 
   // Environment
-  env: { ...process.env, CUSTOM_VAR: 'value' },
+  env: buildSdkEnv(process.env, { CUSTOM_VAR: 'value' }),
   cwd: '/path/to/working/directory',
 
   // MCP servers
@@ -177,14 +177,14 @@ ReferenceError: Bun is not defined
 
 **Cause**: The `ANTHROPIC_API_KEY` environment variable is not set or not passed to the subprocess.
 
-**Solution**: Ensure `env: { ...process.env }` is passed in options:
+**Solution**: Ensure the SDK environment allowlist includes `ANTHROPIC_API_KEY`, then build the subprocess environment through `buildSdkEnv`:
 
 ```typescript
 const options = {
-  env: {
-    ...process.env,  // Includes ANTHROPIC_API_KEY
-    // ... other env vars
-  },
+  env: buildSdkEnv(process.env, {
+    ROOM_ID: 'native:session-id',
+    PLATFORM: 'native',
+  }),
 };
 ```
 

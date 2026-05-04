@@ -1,5 +1,5 @@
 // src/db/messageSessionStore.ts
-// Maps Matrix event IDs to SDK session IDs for conversation continuity
+// Maps platform message IDs to SDK session IDs for conversation continuity
 
 import type Database from 'better-sqlite3';
 

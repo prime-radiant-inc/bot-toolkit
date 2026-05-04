@@ -27,7 +27,7 @@ delegates:
     platform: slack
   - id: U99999ZZZ
     name: Alex
-    platform: matrix
+    platform: email
 ---
 # About My Boss
 `);
@@ -36,7 +36,7 @@ delegates:
     const result = getDelegates();
     expect(result).toEqual([
       { id: 'U12345ABC', name: 'Eden', platform: 'slack' },
-      { id: 'U99999ZZZ', name: 'Alex', platform: 'matrix' },
+      { id: 'U99999ZZZ', name: 'Alex', platform: 'email' },
     ]);
   });
 
@@ -99,7 +99,7 @@ delegates:
   - 42
   - id: U99999ZZZ
     name: Alex
-    platform: matrix
+    platform: email
 ---
 `);
 
@@ -107,7 +107,7 @@ delegates:
     const result = getDelegates();
     expect(result).toEqual([
       { id: 'U12345ABC', name: 'Eden', platform: 'slack' },
-      { id: 'U99999ZZZ', name: 'Alex', platform: 'matrix' },
+      { id: 'U99999ZZZ', name: 'Alex', platform: 'email' },
     ]);
   });
 
@@ -146,7 +146,7 @@ delegates:
 `);
 
     const { isDelegate } = await import('../delegateStore.js');
-    expect(isDelegate('U12345ABC', 'matrix')).toBe(false);
+    expect(isDelegate('U12345ABC', 'email')).toBe(false);
   });
 
   it('returns false when no delegates exist', async () => {

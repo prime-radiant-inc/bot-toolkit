@@ -448,7 +448,7 @@ export class ConversationOrchestrator {
         }
       },
       onToolUse: async (name, input) => {
-        // Record for display (Matrix responder uses this, others ignore)
+        // Record for responders that surface tool calls in the platform UI.
         if ('recordToolUse' in responder) {
           (
             responder as { recordToolUse: (n: string, i: unknown) => void }

@@ -41,9 +41,9 @@ function makeActiveRow(
   return {
     session_id: 'sess-active-1',
     instance_id: 'inst-1',
-    room_id: 'matrix:!room:server.com',
-    thread_id: '$thread1',
-    platform: 'matrix',
+    room_id: 'slack:C99999',
+    thread_id: 'thread-1',
+    platform: 'slack',
     origin: 'user',
     scheduler_job_id: null,
     prompt_preview: 'What is the weather?',
@@ -128,7 +128,7 @@ describe('createTaskTools', () => {
       expect(parsed.count).toBe(1);
       expect(parsed.tasks).toHaveLength(1);
       expect(parsed.tasks[0].id).toBe('sess-active-1');
-      expect(parsed.tasks[0].room).toBe('matrix:!room:server.com');
+      expect(parsed.tasks[0].room).toBe('slack:C99999');
       expect(parsed.tasks[0].prompt_preview).toBe('What is the weather?');
     });
 
@@ -347,9 +347,9 @@ describe('cancel_task integration (real SQLite)', () => {
     registry.register(
       {
         sessionId: 'sess-int-1',
-        roomId: '!room1',
+        roomId: 'C123',
         threadId: null,
-        platform: 'matrix',
+        platform: 'slack',
         origin: 'user',
         promptPreview: 'integration test prompt',
       },
@@ -395,9 +395,9 @@ describe('cancel_task integration (real SQLite)', () => {
     registry.register(
       {
         sessionId: 'sess-race-int',
-        roomId: '!room1',
+        roomId: 'C123',
         threadId: null,
-        platform: 'matrix',
+        platform: 'slack',
         origin: 'user',
         promptPreview: 'race condition test',
       },
@@ -432,9 +432,9 @@ describe('cancel_task integration (real SQLite)', () => {
     registry.register(
       {
         sessionId: 'sess-race-int-2',
-        roomId: '!room1',
+        roomId: 'C123',
         threadId: null,
-        platform: 'matrix',
+        platform: 'slack',
         origin: 'user',
         promptPreview: 'reverse race test',
       },

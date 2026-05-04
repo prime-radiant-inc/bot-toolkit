@@ -74,9 +74,9 @@ describe('buildActiveTaskResponse', () => {
       {
         session_id: 'sess_1',
         instance_id: 'inst_1',
-        room_id: '!room1',
-        thread_id: '$thread1',
-        platform: 'matrix',
+        room_id: 'C123',
+        thread_id: 'thread-1',
+        platform: 'slack',
         origin: 'user',
         scheduler_job_id: null,
         prompt_preview: 'hello',
@@ -95,8 +95,8 @@ describe('buildActiveTaskResponse', () => {
     expect(response.count).toBe(1);
     expect(response.tasks).toHaveLength(1);
     expect(response.tasks[0].id).toBe('sess_1');
-    expect(response.tasks[0].room).toBe('!room1');
-    expect(response.tasks[0].thread_id).toBe('$thread1');
+    expect(response.tasks[0].room).toBe('C123');
+    expect(response.tasks[0].thread_id).toBe('thread-1');
     expect(response.tasks[0].origin).toBe('user');
     expect(response.tasks[0].prompt_preview).toBe('hello');
     expect(response.tasks[0].running_for).toMatch(/\d+/);
@@ -115,9 +115,9 @@ describe('buildRecentTaskResponse', () => {
       {
         session_id: 'sess_1',
         instance_id: 'inst_1',
-        room_id: '!room1',
+        room_id: 'C123',
         thread_id: null,
-        platform: 'matrix',
+        platform: 'slack',
         origin: 'scheduled',
         scheduler_job_id: 'job_1',
         prompt_preview: 'daily report',
@@ -194,9 +194,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
-          threadId: '$thread1',
-          platform: 'matrix',
+          roomId: 'C123',
+          threadId: 'thread-1',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'what is the meaning of life',
         },
@@ -206,9 +206,9 @@ describe('TaskRegistry', () => {
       const active = registry.getActive();
       expect(active).toHaveLength(1);
       expect(active[0].session_id).toBe('sess_1');
-      expect(active[0].room_id).toBe('!room1');
-      expect(active[0].thread_id).toBe('$thread1');
-      expect(active[0].platform).toBe('matrix');
+      expect(active[0].room_id).toBe('C123');
+      expect(active[0].thread_id).toBe('thread-1');
+      expect(active[0].platform).toBe('slack');
       expect(active[0].origin).toBe('user');
       expect(active[0].status).toBe('active');
       expect(active[0].started_at).toBeGreaterThan(0);
@@ -219,9 +219,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -237,8 +237,8 @@ describe('TaskRegistry', () => {
         .run(
           'sess_other',
           'different-instance',
-          '!room2',
-          'matrix',
+          'C456',
+          'slack',
           'user',
           'other task',
           'active',
@@ -257,9 +257,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_dup',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'first',
         },
@@ -270,9 +270,9 @@ describe('TaskRegistry', () => {
         registry.register(
           {
             sessionId: 'sess_dup',
-            roomId: '!room1',
+            roomId: 'C123',
             threadId: null,
-            platform: 'matrix',
+            platform: 'slack',
             origin: 'user',
             promptPreview: 'second',
           },
@@ -287,7 +287,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_resume',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -307,7 +307,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_resume',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -332,7 +332,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_errored',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -345,7 +345,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_errored',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -363,7 +363,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_cancelled',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -376,7 +376,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_cancelled',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -399,7 +399,7 @@ describe('TaskRegistry', () => {
         .run(
           'sess_interrupted',
           'old-instance',
-          '!room1',
+          'C123',
           'slack',
           'user',
           'interrupted task',
@@ -412,7 +412,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_interrupted',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
           platform: 'slack',
           origin: 'user',
@@ -432,9 +432,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -464,9 +464,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -484,9 +484,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -512,9 +512,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -534,9 +534,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -553,9 +553,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -578,9 +578,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -601,9 +601,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -627,9 +627,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -647,9 +647,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -668,9 +668,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -692,9 +692,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test 1',
         },
@@ -713,7 +713,7 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_2',
-          roomId: '!room2',
+          roomId: 'C456',
           threadId: null,
           platform: 'slack',
           origin: 'scheduled',
@@ -745,9 +745,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -770,8 +770,8 @@ describe('TaskRegistry', () => {
         .run(
           'sess_other',
           'different-instance',
-          '!room2',
-          'matrix',
+          'C456',
+          'slack',
           'user',
           'other task',
           'active',
@@ -800,9 +800,9 @@ describe('TaskRegistry', () => {
         .run(
           'sess_stale',
           'old-instance',
-          '!room1',
-          '$thread1',
-          'matrix',
+          'C123',
+          'thread-1',
+          'slack',
           'user',
           'stale task',
           'active',
@@ -811,7 +811,7 @@ describe('TaskRegistry', () => {
         );
 
       const sendRecoveryNotice = vi.fn().mockResolvedValue(undefined);
-      const adapters = new Map([['matrix', { sendRecoveryNotice }]]);
+      const adapters = new Map([['slack', { sendRecoveryNotice }]]);
 
       // Override delay for test speed
       await registry.recoverInterruptedTasks(adapters, 0);
@@ -821,8 +821,8 @@ describe('TaskRegistry', () => {
         .get('sess_stale') as { status: string };
       expect(entry.status).toBe('interrupted');
       expect(sendRecoveryNotice).toHaveBeenCalledWith(
-        '!room1',
-        '$thread1',
+        'C123',
+        'thread-1',
         expect.stringContaining('restart'),
       );
     });
@@ -832,9 +832,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_own',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'test',
         },
@@ -842,7 +842,7 @@ describe('TaskRegistry', () => {
       );
 
       const sendRecoveryNotice = vi.fn().mockResolvedValue(undefined);
-      const adapters = new Map([['matrix', { sendRecoveryNotice }]]);
+      const adapters = new Map([['slack', { sendRecoveryNotice }]]);
 
       await registry.recoverInterruptedTasks(adapters, 0);
 
@@ -862,9 +862,9 @@ describe('TaskRegistry', () => {
         .run(
           'sess_stale',
           'old-instance',
-          '!room1',
-          '$thread1',
-          'matrix',
+          'C123',
+          'thread-1',
+          'slack',
           'user',
           'stale task',
           'active',
@@ -873,7 +873,7 @@ describe('TaskRegistry', () => {
         );
 
       const sendRecoveryNotice = vi.fn().mockResolvedValue(undefined);
-      const adapters = new Map([['matrix', { sendRecoveryNotice }]]);
+      const adapters = new Map([['slack', { sendRecoveryNotice }]]);
 
       await registry.recoverInterruptedTasks(adapters, 0);
 
@@ -898,8 +898,8 @@ describe('TaskRegistry', () => {
         .run(
           'sess_old',
           'inst',
-          '!room1',
-          'matrix',
+          'C123',
+          'slack',
           'user',
           'old task',
           'completed',
@@ -918,9 +918,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_recent',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'recent task',
         },
@@ -950,8 +950,8 @@ describe('TaskRegistry', () => {
         .run(
           'sess_old_active',
           'inst',
-          '!room1',
-          'matrix',
+          'C123',
+          'slack',
           'user',
           'old active task',
           'active',
@@ -977,9 +977,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_race_1',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'race test',
         },
@@ -1004,9 +1004,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_race_2',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'race test',
         },
@@ -1031,9 +1031,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_race_3',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'race test',
         },
@@ -1051,9 +1051,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_race_4',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: 'race test',
         },
@@ -1080,9 +1080,9 @@ describe('TaskRegistry', () => {
       registry.register(
         {
           sessionId: 'sess_scheduled',
-          roomId: '!room1',
+          roomId: 'C123',
           threadId: null,
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'scheduled',
           schedulerJobId: 'job_abc',
           promptPreview: 'scheduled task',

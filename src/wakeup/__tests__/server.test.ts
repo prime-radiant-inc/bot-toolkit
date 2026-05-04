@@ -291,7 +291,7 @@ describe('createWakeupServer', () => {
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         status: 'error',
-        error: 'Unknown platform: unknown. Valid platforms: native, matrix',
+        error: 'Unknown platform: unknown. Valid platforms: native',
       });
       expect(adapter.handleWakeup).not.toHaveBeenCalled();
     } finally {

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS task_registry (
   instance_id TEXT NOT NULL,
   room_id TEXT NOT NULL,
   thread_id TEXT,
-  platform TEXT NOT NULL CHECK(platform IN ('matrix', 'slack', 'native', 'email')),
+  platform TEXT NOT NULL CHECK(platform IN ('slack', 'native', 'email')),
   origin TEXT NOT NULL CHECK(origin IN ('user', 'scheduled')),
   scheduler_job_id TEXT,
   prompt_preview TEXT NOT NULL,

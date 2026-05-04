@@ -21,16 +21,16 @@ describe('MessageSessionStore', () => {
   });
 
   it('should save and retrieve a session', () => {
-    store.saveSession('$evt1', '!room1', {
+    store.saveSession('msg-1', 'C123', {
       sessionId: 'sess_abc',
       contextTokens: 1500,
       compactionCount: 0,
     });
 
-    const session = store.getSession('$evt1');
+    const session = store.getSession('msg-1');
     expect(session).not.toBeNull();
-    expect(session!.eventId).toBe('$evt1');
-    expect(session!.roomId).toBe('!room1');
+    expect(session!.eventId).toBe('msg-1');
+    expect(session!.roomId).toBe('C123');
     expect(session!.sessionId).toBe('sess_abc');
     expect(session!.contextTokens).toBe(1500);
     expect(session!.compactionCount).toBe(0);
@@ -42,18 +42,18 @@ describe('MessageSessionStore', () => {
   });
 
   it('should upsert on conflict', () => {
-    store.saveSession('$evt1', '!room1', {
+    store.saveSession('msg-1', 'C123', {
       sessionId: 'sess_1',
       contextTokens: 100,
       compactionCount: 0,
     });
-    store.saveSession('$evt1', '!room1', {
+    store.saveSession('msg-1', 'C123', {
       sessionId: 'sess_2',
       contextTokens: 200,
       compactionCount: 1,
     });
 
-    const session = store.getSession('$evt1');
+    const session = store.getSession('msg-1');
     expect(session!.sessionId).toBe('sess_2');
     expect(session!.contextTokens).toBe(200);
     expect(session!.compactionCount).toBe(1);
@@ -61,17 +61,17 @@ describe('MessageSessionStore', () => {
 
   describe('deleteSession', () => {
     it('should delete an existing session', () => {
-      store.saveSession('$evt1', '!room1', {
+      store.saveSession('msg-1', 'C123', {
         sessionId: 'sess_abc',
         contextTokens: 1000,
         compactionCount: 0,
       });
 
-      expect(store.getSession('$evt1')).not.toBeNull();
+      expect(store.getSession('msg-1')).not.toBeNull();
 
-      store.deleteSession('$evt1');
+      store.deleteSession('msg-1');
 
-      expect(store.getSession('$evt1')).toBeNull();
+      expect(store.getSession('msg-1')).toBeNull();
     });
 
     it('should be a no-op for non-existent event', () => {
@@ -80,21 +80,21 @@ describe('MessageSessionStore', () => {
     });
 
     it('should not affect other sessions', () => {
-      store.saveSession('$evt1', '!room1', {
+      store.saveSession('msg-1', 'C123', {
         sessionId: 'sess_1',
         contextTokens: 100,
         compactionCount: 0,
       });
-      store.saveSession('$evt2', '!room1', {
+      store.saveSession('msg-2', 'C123', {
         sessionId: 'sess_2',
         contextTokens: 200,
         compactionCount: 0,
       });
 
-      store.deleteSession('$evt1');
+      store.deleteSession('msg-1');
 
-      expect(store.getSession('$evt1')).toBeNull();
-      expect(store.getSession('$evt2')).not.toBeNull();
+      expect(store.getSession('msg-1')).toBeNull();
+      expect(store.getSession('msg-2')).not.toBeNull();
     });
   });
 
@@ -105,10 +105,10 @@ describe('MessageSessionStore', () => {
         INSERT INTO message_sessions (event_id, room_id, session_id, created_at, context_tokens, compaction_count)
         VALUES (?, ?, ?, ?, ?, ?)
       `);
-      insert.run('$evt1', '!room1', 'sess_1', 1000, 100, 0);
-      insert.run('$evt2', '!room1', 'sess_2', 2000, 200, 0);
+      insert.run('msg-1', 'C123', 'sess_1', 1000, 100, 0);
+      insert.run('msg-2', 'C123', 'sess_2', 2000, 200, 0);
 
-      const sessions = store.getSessionsForRoom('!room1');
+      const sessions = store.getSessionsForRoom('C123');
       expect(sessions).toHaveLength(2);
       // Most recent first
       expect(sessions[0].sessionId).toBe('sess_2');
@@ -116,36 +116,36 @@ describe('MessageSessionStore', () => {
     });
 
     it('should respect limit parameter', () => {
-      store.saveSession('$evt1', '!room1', {
+      store.saveSession('msg-1', 'C123', {
         sessionId: 'sess_1',
         contextTokens: 100,
         compactionCount: 0,
       });
-      store.saveSession('$evt2', '!room1', {
+      store.saveSession('msg-2', 'C123', {
         sessionId: 'sess_2',
         contextTokens: 200,
         compactionCount: 0,
       });
 
-      const sessions = store.getSessionsForRoom('!room1', 1);
+      const sessions = store.getSessionsForRoom('C123', 1);
       expect(sessions).toHaveLength(1);
     });
 
     it('should only return sessions for the specified room', () => {
-      store.saveSession('$evt1', '!room1', {
+      store.saveSession('msg-1', 'C123', {
         sessionId: 'sess_1',
         contextTokens: 100,
         compactionCount: 0,
       });
-      store.saveSession('$evt2', '!room2', {
+      store.saveSession('msg-2', 'C456', {
         sessionId: 'sess_2',
         contextTokens: 200,
         compactionCount: 0,
       });
 
-      const sessions = store.getSessionsForRoom('!room1');
+      const sessions = store.getSessionsForRoom('C123');
       expect(sessions).toHaveLength(1);
-      expect(sessions[0].roomId).toBe('!room1');
+      expect(sessions[0].roomId).toBe('C123');
     });
   });
 });

@@ -46,8 +46,8 @@ export interface RoomInfo {
  */
 export function sanitizeRoomId(roomId: string): string {
   return roomId
-    .replace(/^!/, '') // Remove leading ! (Matrix)
-    .replace(/:/g, '_') // Replace : with _ (Matrix)
+    .replace(/^!/, '')
+    .replace(/:/g, '_')
     .toLowerCase() // Lowercase
     .replace(/[^a-z0-9_.-]/g, '') // Keep only safe chars
     .replace(/^[.-]+/, '') // Don't start with . or -

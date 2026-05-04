@@ -84,7 +84,7 @@ function makeMessage(
   overrides: Partial<IncomingMessage> = {},
 ): IncomingMessage {
   return {
-    platform: 'matrix',
+    platform: 'slack',
     channelId: 'room123',
     channelName: 'general',
     threadId: null,
@@ -1274,7 +1274,7 @@ describe('ConversationOrchestrator', () => {
       // Create outbox with a file in the room directory
       const fs = await import('node:fs');
       const path = await import('node:path');
-      const roomDir = '/tmp/test/rooms/matrix/room123';
+      const roomDir = '/tmp/test/rooms/slack/room123';
       const outboxDir = path.join(roomDir, 'outbox');
       fs.mkdirSync(outboxDir, { recursive: true });
       fs.writeFileSync(path.join(outboxDir, 'report.csv'), 'data');
@@ -1304,7 +1304,7 @@ describe('ConversationOrchestrator', () => {
       // Create outbox with a file
       const fs = await import('node:fs');
       const path = await import('node:path');
-      const roomDir = '/tmp/test/rooms/matrix/room123';
+      const roomDir = '/tmp/test/rooms/slack/room123';
       const outboxDir = path.join(roomDir, 'outbox');
       fs.mkdirSync(outboxDir, { recursive: true });
       fs.writeFileSync(path.join(outboxDir, 'bad-file.txt'), 'data');
@@ -1476,7 +1476,7 @@ describe('ConversationOrchestrator', () => {
         expect.objectContaining({
           sessionId: 'sess_reg',
           roomId: 'room123',
-          platform: 'matrix',
+          platform: 'slack',
           origin: 'user',
           promptPreview: expect.stringContaining('do something'),
         }),

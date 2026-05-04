@@ -35,8 +35,17 @@ export interface WakeupServerConfig {
   host?: string;
 }
 
-// Known platform prefixes for room_id parsing
-const KNOWN_PLATFORMS = ['slack', 'native', 'email'];
+// Known platform prefixes for room_id parsing.
+const KNOWN_PLATFORMS = ['slack', 'native', 'email'] as const;
+
+function formatValidPlatforms(adapters: Map<string, PlatformAdapter>): string {
+  const supported = KNOWN_PLATFORMS.filter((platform) =>
+    adapters.has(platform),
+  );
+  return supported.length > 0
+    ? supported.join(', ')
+    : KNOWN_PLATFORMS.join(', ');
+}
 
 function requireBearerToken(authToken: string): Router {
   const router = express.Router();
@@ -157,7 +166,7 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
       logger.error('Unknown platform', { platform, roomId });
       res.status(400).json({
         status: 'error',
-        error: `Unknown platform: ${platform}. Valid platforms: ${Array.from(adapters.keys()).join(', ')}`,
+        error: `Unknown platform: ${platform}. Valid platforms: ${formatValidPlatforms(adapters)}`,
       });
       return;
     }
@@ -281,9 +290,10 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
     const adapter = adapters.get(platform);
 
     if (!adapter) {
-      res
-        .status(400)
-        .json({ status: 'error', error: `Unknown platform: ${platform}` });
+      res.status(400).json({
+        status: 'error',
+        error: `Unknown platform: ${platform}. Valid platforms: ${formatValidPlatforms(adapters)}`,
+      });
       return;
     }
 
