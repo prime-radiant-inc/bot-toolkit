@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { WebSocket } from 'ws';
 import { NativeResponder } from '../responder.js';
 import { NativeSessionManager } from '../sessionManager.js';
 
@@ -42,9 +43,10 @@ describe('Native Wakeup Integration', () => {
       send: (msg: string) => sentMessages.push(msg),
     };
 
-    sessionManager.attach(session.id, mockWs as any);
+    const ws = mockWs as unknown as WebSocket;
+    sessionManager.attach(session.id, ws);
 
-    const responder = new NativeResponder(session.id, mockWs as any);
+    const responder = new NativeResponder(session.id, ws);
     // updateResponse receives full accumulated text (matching SDK behavior)
     await responder.updateResponse('Hello');
     await responder.updateResponse('Hello World');

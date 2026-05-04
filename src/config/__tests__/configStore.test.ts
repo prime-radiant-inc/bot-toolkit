@@ -3,7 +3,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigStore } from '../configStore.js';
-import type { SecretsReader } from '../configTypes.js';
+import type {
+  ResolvedMcp,
+  ResolvedRemoteMcp,
+  ResolvedStdioMcp,
+  SecretsReader,
+} from '../configTypes.js';
+
+const TEMPLATE_OPEN = '$' + '{';
+const TEMPLATE_ELLIPSIS = `${TEMPLATE_OPEN}...}`;
+const TEMPLATE_VAR = templateRef('VAR');
+
+function templateRef(name: string): string {
+  return `${TEMPLATE_OPEN}${name}}`;
+}
 
 function createMockSecretsReader(
   secrets: Record<string, string> = {},
@@ -23,6 +36,36 @@ function createMockSecretsReader(
 
 function writeConfig(configDir: string, config: Record<string, unknown>): void {
   writeFileSync(join(configDir, 'instance.json'), JSON.stringify(config));
+}
+
+function expectFirstMcp(mcps: ResolvedMcp[]): ResolvedMcp {
+  const mcp = mcps[0];
+  if (!mcp) {
+    throw new Error('Expected at least one MCP');
+  }
+  return mcp;
+}
+
+function expectMcpById(mcps: ResolvedMcp[], id: string): ResolvedMcp {
+  const mcp = mcps.find((candidate) => candidate.id === id);
+  if (!mcp) {
+    throw new Error(`Expected MCP "${id}" to exist`);
+  }
+  return mcp;
+}
+
+function expectStdioMcp(mcp: ResolvedMcp): ResolvedStdioMcp {
+  if (mcp.type !== 'stdio') {
+    throw new Error(`Expected stdio MCP, got "${mcp.type}"`);
+  }
+  return mcp;
+}
+
+function expectRemoteMcp(mcp: ResolvedMcp): ResolvedRemoteMcp {
+  if (mcp.type === 'stdio') {
+    throw new Error('Expected remote MCP, got "stdio"');
+  }
+  return mcp;
 }
 
 describe('ConfigStore', () => {
@@ -92,8 +135,8 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       expect(mcps).toHaveLength(2);
-      const mcp1 = mcps.find((m) => m.id === 'mcp1')!;
-      const mcp2 = mcps.find((m) => m.id === 'mcp2')!;
+      const mcp1 = expectStdioMcp(expectMcpById(mcps, 'mcp1'));
+      const mcp2 = expectStdioMcp(expectMcpById(mcps, 'mcp2'));
       expect(mcp1.env).toHaveProperty('API_KEY', 'key123');
       expect(mcp2.env).toHaveProperty('DB_URL', 'postgres://...');
     });
@@ -239,14 +282,16 @@ describe('ConfigStore', () => {
   });
 
   describe('getEnabledMcps - remote MCP resolution', () => {
-    it('resolves HTTP remote MCP with ${SECRET} template in headers', async () => {
+    it(`resolves HTTP remote MCP with ${templateRef('SECRET')} template in headers`, async () => {
       writeConfig(configDir, {
         mcps: {
           linear: {
             enabled: true,
             type: 'http',
             url: 'https://mcp.linear.app/mcp',
-            headers: { Authorization: 'Bearer ${LINEAR_API_KEY}' },
+            headers: {
+              Authorization: `Bearer ${templateRef('LINEAR_API_KEY')}`,
+            },
             envFrom: ['LINEAR_API_KEY'],
           },
         },
@@ -262,7 +307,7 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       expect(mcps).toHaveLength(1);
-      const mcp = mcps[0] as any;
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
       expect(mcp.type).toBe('http');
       expect(mcp.url).toBe('https://mcp.linear.app/mcp');
       expect(mcp.headers).toEqual({
@@ -287,12 +332,12 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       expect(mcps).toHaveLength(1);
-      const mcp = mcps[0] as any;
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
       expect(mcp.type).toBe('sse');
       expect(mcp.headers).toEqual({});
     });
 
-    it('resolves multiple ${...} templates in one header value', async () => {
+    it(`resolves multiple ${TEMPLATE_ELLIPSIS} templates in one header value`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
@@ -300,8 +345,8 @@ describe('ConfigStore', () => {
             type: 'http',
             url: 'https://api.example.com/mcp',
             headers: {
-              Authorization: '${TOKEN_TYPE} ${TOKEN_VALUE}',
-              'X-Api-Key': '${API_KEY}',
+              Authorization: `${templateRef('TOKEN_TYPE')} ${templateRef('TOKEN_VALUE')}`,
+              'X-Api-Key': templateRef('API_KEY'),
             },
             envFrom: ['TOKEN_TYPE', 'TOKEN_VALUE', 'API_KEY'],
           },
@@ -321,7 +366,7 @@ describe('ConfigStore', () => {
       );
       const mcps = await store.getEnabledMcps();
 
-      const mcp = mcps[0] as any;
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
       expect(mcp.headers.Authorization).toBe('Bearer tok_abc123');
       expect(mcp.headers['X-Api-Key']).toBe('key_xyz');
     });
@@ -347,7 +392,7 @@ describe('ConfigStore', () => {
         const store = new ConfigStore(configDir, createMockSecretsReader());
         const mcps = await store.getEnabledMcps();
 
-        const mcp = mcps[0] as any;
+        const mcp = expectRemoteMcp(expectFirstMcp(mcps));
         expect(mcp.url).toBe('https://example.com/~/mcp');
       } finally {
         process.env.HOME = originalHome;
@@ -361,7 +406,7 @@ describe('ConfigStore', () => {
             enabled: true,
             type: 'http',
             url: 'https://api.example.com/mcp',
-            headers: { Authorization: 'Bearer ${MISSING_TOKEN}' },
+            headers: { Authorization: `Bearer ${templateRef('MISSING_TOKEN')}` },
             envFrom: ['MISSING_TOKEN'],
           },
         },
@@ -390,7 +435,7 @@ describe('ConfigStore', () => {
             enabled: true,
             type: 'http',
             url: 'https://api.example.com/mcp',
-            headers: { Authorization: '${EMPTY_TOKEN}' },
+            headers: { Authorization: templateRef('EMPTY_TOKEN') },
             envFrom: ['EMPTY_TOKEN'],
           },
         },
@@ -406,7 +451,7 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       expect(mcps).toHaveLength(1);
-      const mcp = mcps[0] as any;
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
       expect(mcp.headers.Authorization).toBe('');
     });
   });
@@ -426,7 +471,7 @@ describe('ConfigStore', () => {
             enabled: true,
             type: 'http',
             url: 'https://mcp.example.com/mcp',
-            headers: { 'X-Key': '${API_KEY}' },
+            headers: { 'X-Key': templateRef('API_KEY') },
             envFrom: ['API_KEY'],
           },
         },
@@ -443,13 +488,13 @@ describe('ConfigStore', () => {
 
       expect(mcps).toHaveLength(2);
 
-      const stdio = mcps.find((m) => m.id === 'local')! as any;
+      const stdio = expectStdioMcp(expectMcpById(mcps, 'local'));
       expect(stdio.type).toBe('stdio');
       expect(stdio.command).toBe('node');
       expect(stdio.args).toEqual(['server.js']);
       expect(stdio.env).toHaveProperty('PORT', '3000');
 
-      const remote = mcps.find((m) => m.id === 'remote')! as any;
+      const remote = expectRemoteMcp(expectMcpById(mcps, 'remote'));
       expect(remote.type).toBe('http');
       expect(remote.url).toBe('https://mcp.example.com/mcp');
       expect(remote.headers).toEqual({ 'X-Key': 'key123' });
@@ -469,7 +514,9 @@ describe('ConfigStore', () => {
             enabled: true,
             type: 'http',
             url: 'https://mcp.example.com/mcp',
-            headers: { Authorization: 'Bearer ${REMOTE_SECRET}' },
+            headers: {
+              Authorization: `Bearer ${templateRef('REMOTE_SECRET')}`,
+            },
             envFrom: ['REMOTE_SECRET'],
           },
         },
@@ -491,10 +538,10 @@ describe('ConfigStore', () => {
         expect.arrayContaining(['STDIO_SECRET', 'REMOTE_SECRET']),
       );
 
-      const stdio = mcps.find((m) => m.id === 'stdio')! as any;
+      const stdio = expectStdioMcp(expectMcpById(mcps, 'stdio'));
       expect(stdio.env.STDIO_SECRET).toBe('stdio_val');
 
-      const remote = mcps.find((m) => m.id === 'remote')! as any;
+      const remote = expectRemoteMcp(expectMcpById(mcps, 'remote'));
       expect(remote.headers.Authorization).toBe('Bearer remote_val');
     });
 
@@ -548,7 +595,7 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       expect(mcps).toHaveLength(1);
-      expect((mcps[0] as any).type).toBe('stdio');
+      expect(expectFirstMcp(mcps).type).toBe('stdio');
     });
 
     it('normalizes streamable-http to http', async () => {
@@ -569,19 +616,19 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       expect(mcps).toHaveLength(1);
-      expect((mcps[0] as any).type).toBe('http');
+      expect(expectFirstMcp(mcps).type).toBe('http');
     });
   });
 
   describe('getEnabledMcps - stdio env template resolution', () => {
-    it('resolves ${VAR} templates in env values using fetched secrets', async () => {
+    it(`resolves ${TEMPLATE_VAR} templates in env values using fetched secrets`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             command: 'node',
             args: ['server.js'],
-            env: { API_TOKEN: '${WORK_TOKEN}' },
+            env: { API_TOKEN: templateRef('WORK_TOKEN') },
             envFrom: ['WORK_TOKEN'],
           },
         },
@@ -600,14 +647,16 @@ describe('ConfigStore', () => {
       expect(mcps[0].env).toHaveProperty('WORK_TOKEN', 'tok_abc123');
     });
 
-    it('resolves multiple ${...} templates in one env value', async () => {
+    it(`resolves multiple ${TEMPLATE_ELLIPSIS} templates in one env value`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             command: 'node',
             args: ['server.js'],
-            env: { CONNECTION: '${PROTOCOL}://${HOST}' },
+            env: {
+              CONNECTION: `${templateRef('PROTOCOL')}://${templateRef('HOST')}`,
+            },
             envFrom: ['PROTOCOL', 'HOST'],
           },
         },
@@ -625,14 +674,14 @@ describe('ConfigStore', () => {
       expect(mcps[0].env.CONNECTION).toBe('https://api.example.com');
     });
 
-    it('leaves unresolved ${VAR} templates as-is', async () => {
+    it(`leaves unresolved ${TEMPLATE_VAR} templates as-is`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             command: 'node',
             args: ['server.js'],
-            env: { TOKEN: '${MISSING_SECRET}' },
+            env: { TOKEN: templateRef('MISSING_SECRET') },
             envFrom: ['MISSING_SECRET'],
           },
         },
@@ -643,17 +692,17 @@ describe('ConfigStore', () => {
       const store = new ConfigStore(configDir, createMockSecretsReader());
       const mcps = await store.getEnabledMcps();
 
-      expect(mcps[0].env.TOKEN).toBe('${MISSING_SECRET}');
+      expect(mcps[0].env.TOKEN).toBe(templateRef('MISSING_SECRET'));
     });
 
-    it('does NOT recursively substitute ${...} in resolved secret values', async () => {
+    it(`does NOT recursively substitute ${TEMPLATE_ELLIPSIS} in resolved secret values`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             command: 'node',
             args: ['server.js'],
-            env: { TOKEN: '${SECRET}' },
+            env: { TOKEN: templateRef('SECRET') },
             envFrom: ['SECRET'],
           },
         },
@@ -661,14 +710,14 @@ describe('ConfigStore', () => {
         knowledge: [],
       });
 
-      const secrets = { SECRET: '${NESTED_VALUE}' };
+      const secrets = { SECRET: templateRef('NESTED_VALUE') };
       const store = new ConfigStore(
         configDir,
         createMockSecretsReader(secrets),
       );
       const mcps = await store.getEnabledMcps();
 
-      expect(mcps[0].env.TOKEN).toBe('${NESTED_VALUE}');
+      expect(mcps[0].env.TOKEN).toBe(templateRef('NESTED_VALUE'));
     });
 
     it('$VAR without braces passes through unchanged', async () => {
@@ -710,7 +759,7 @@ describe('ConfigStore', () => {
         knowledge: [],
       });
 
-      const secrets = { MY_SECRET: '${SHOULD_NOT_RESOLVE}' };
+      const secrets = { MY_SECRET: templateRef('SHOULD_NOT_RESOLVE') };
       const store = new ConfigStore(
         configDir,
         createMockSecretsReader(secrets),
@@ -718,19 +767,21 @@ describe('ConfigStore', () => {
       const mcps = await store.getEnabledMcps();
 
       // envFrom value inserted directly, not template-resolved
-      expect(mcps[0].env.MY_SECRET).toBe('${SHOULD_NOT_RESOLVE}');
+      expect(mcps[0].env.MY_SECRET).toBe(
+        templateRef('SHOULD_NOT_RESOLVE'),
+      );
     });
   });
 
   describe('edge cases', () => {
-    it('secret value containing ${...} is NOT recursively substituted', async () => {
+    it(`secret value containing ${TEMPLATE_ELLIPSIS} is NOT recursively substituted`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             type: 'http',
             url: 'https://mcp.example.com/mcp',
-            headers: { Authorization: '${TOKEN}' },
+            headers: { Authorization: templateRef('TOKEN') },
             envFrom: ['TOKEN'],
           },
         },
@@ -738,24 +789,24 @@ describe('ConfigStore', () => {
         knowledge: [],
       });
 
-      const secrets = { TOKEN: '${NESTED_VALUE}' };
+      const secrets = { TOKEN: templateRef('NESTED_VALUE') };
       const store = new ConfigStore(
         configDir,
         createMockSecretsReader(secrets),
       );
       const mcps = await store.getEnabledMcps();
 
-      const mcp = mcps[0] as any;
-      expect(mcp.headers.Authorization).toBe('${NESTED_VALUE}');
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
+      expect(mcp.headers.Authorization).toBe(templateRef('NESTED_VALUE'));
     });
 
-    it('URL containing ${...} is NOT template-substituted', async () => {
+    it(`URL containing ${TEMPLATE_ELLIPSIS} is NOT template-substituted`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             type: 'http',
-            url: 'https://mcp.example.com/${path}/mcp',
+            url: `https://mcp.example.com/${templateRef('path')}/mcp`,
             headers: {},
             envFrom: ['path'],
           },
@@ -771,18 +822,18 @@ describe('ConfigStore', () => {
       );
       const mcps = await store.getEnabledMcps();
 
-      const mcp = mcps[0] as any;
-      expect(mcp.url).toBe('https://mcp.example.com/${path}/mcp');
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
+      expect(mcp.url).toBe(`https://mcp.example.com/${templateRef('path')}/mcp`);
     });
 
-    it('hyphenated secret name ${MY-API-KEY} matches correctly', async () => {
+    it(`hyphenated secret name ${templateRef('MY-API-KEY')} matches correctly`, async () => {
       writeConfig(configDir, {
         mcps: {
           mcp: {
             enabled: true,
             type: 'http',
             url: 'https://mcp.example.com/mcp',
-            headers: { Authorization: 'Bearer ${MY-API-KEY}' },
+            headers: { Authorization: `Bearer ${templateRef('MY-API-KEY')}` },
             envFrom: ['MY-API-KEY'],
           },
         },
@@ -797,7 +848,7 @@ describe('ConfigStore', () => {
       );
       const mcps = await store.getEnabledMcps();
 
-      const mcp = mcps[0] as any;
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
       expect(mcp.headers.Authorization).toBe('Bearer key_abc');
     });
 
@@ -823,7 +874,7 @@ describe('ConfigStore', () => {
       );
       const mcps = await store.getEnabledMcps();
 
-      const mcp = mcps[0] as any;
+      const mcp = expectRemoteMcp(expectFirstMcp(mcps));
       expect(mcp.headers.Authorization).toBe('Bearer $TOKEN');
     });
 
@@ -834,7 +885,7 @@ describe('ConfigStore', () => {
             enabled: true,
             type: 'http',
             url: 'https://mcp.example.com/mcp',
-            headers: { Authorization: 'Bearer ${TOKEN}' },
+            headers: { Authorization: `Bearer ${templateRef('TOKEN')}` },
             envFrom: ['TOKEN'],
           },
           stdio: {
@@ -857,7 +908,7 @@ describe('ConfigStore', () => {
       expect(written.mcps.remote.type).toBe('http');
       expect(written.mcps.remote.url).toBe('https://mcp.example.com/mcp');
       expect(written.mcps.remote.headers).toEqual({
-        Authorization: 'Bearer ${TOKEN}',
+        Authorization: `Bearer ${templateRef('TOKEN')}`,
       });
       expect(written.mcps.remote.envFrom).toEqual(['TOKEN']);
       expect(written.mcps.stdio.enabled).toBe(true);

@@ -1,15 +1,47 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SSMClient } from '@aws-sdk/client-ssm';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  vi,
+} from 'vitest';
 import { SSMSecretsReader } from '../ssm.js';
+
+interface FakeGetParametersCommand {
+  input: {
+    Names: string[];
+  };
+}
+
+interface FakeGetParametersResponse {
+  Parameters: Array<{ Name: string; Value: string }>;
+  InvalidParameters: string[];
+}
+
+type FakeSSMSend = Mock<
+  (command: FakeGetParametersCommand) => Promise<FakeGetParametersResponse>
+>;
+
+type FakeSSMClient = SSMClient & { send: FakeSSMSend };
+
+function createFakeSSMClientWithSend(send: FakeSSMSend): FakeSSMClient {
+  const client = new SSMClient({ region: 'us-west-1' });
+  client.send = send as unknown as SSMClient['send'];
+  return Object.assign(client, { send });
+}
 
 /**
  * Minimal fake SSM client that mimics AWS SDK GetParametersCommand responses.
  * Tracks call count so we can verify caching prevents redundant fetches.
  */
-function createFakeSSMClient(secrets: Record<string, string>) {
-  const send = vi.fn(async (command: any) => {
+function createFakeSSMClient(secrets: Record<string, string>): FakeSSMClient {
+  const send = vi.fn(async (command: FakeGetParametersCommand) => {
     const names: string[] = command.input.Names;
-    const Parameters = [];
-    const InvalidParameters = [];
+    const Parameters: FakeGetParametersResponse['Parameters'] = [];
+    const InvalidParameters: string[] = [];
     for (const name of names) {
       if (secrets[name] !== undefined) {
         Parameters.push({ Name: name, Value: secrets[name] });
@@ -20,7 +52,7 @@ function createFakeSSMClient(secrets: Record<string, string>) {
     return { Parameters, InvalidParameters };
   });
 
-  return { send };
+  return createFakeSSMClientWithSend(send);
 }
 
 describe('SSMSecretsReader', () => {
@@ -46,7 +78,7 @@ describe('SSMSecretsReader', () => {
       const client = createFakeSSMClient({
         '/sen/drew-prod/API_KEY': 'key123',
       });
-      const reader = new SSMSecretsReader({ client: client as any });
+      const reader = new SSMSecretsReader({ client });
 
       const result = await reader.getAll(['API_KEY']);
 
@@ -60,7 +92,7 @@ describe('SSMSecretsReader', () => {
       const client = createFakeSSMClient({
         '/custom/path/API_KEY': 'from_custom',
       });
-      const reader = new SSMSecretsReader({ client: client as any });
+      const reader = new SSMSecretsReader({ client });
 
       const result = await reader.getAll(['API_KEY']);
 
@@ -74,7 +106,7 @@ describe('SSMSecretsReader', () => {
       const client = createFakeSSMClient({
         '/override/SECRET': 'val',
       });
-      const reader = new SSMSecretsReader({ client: client as any });
+      const reader = new SSMSecretsReader({ client });
 
       const result = await reader.getAll(['SECRET']);
 
@@ -85,7 +117,9 @@ describe('SSMSecretsReader', () => {
       delete process.env.INSTANCE_NAME;
       delete process.env.SSM_PATH_PREFIX;
 
-      expect(() => new SSMSecretsReader({ client: {} as any })).toThrow(
+      expect(
+        () => new SSMSecretsReader({ client: createFakeSSMClient({}) }),
+      ).toThrow(
         'SSM secrets backend requires INSTANCE_NAME or SSM_PATH_PREFIX env var',
       );
     });
@@ -97,7 +131,7 @@ describe('SSMSecretsReader', () => {
       const client = createFakeSSMClient({
         '/no-slash/KEY': 'val',
       });
-      const reader = new SSMSecretsReader({ client: client as any });
+      const reader = new SSMSecretsReader({ client });
 
       const result = await reader.getAll(['KEY']);
 
@@ -109,7 +143,7 @@ describe('SSMSecretsReader', () => {
         '/explicit/KEY': 'val',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/explicit',
       });
 
@@ -126,7 +160,7 @@ describe('SSMSecretsReader', () => {
         '/option-prefix/KEY': 'from_option',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/option-prefix/',
       });
 
@@ -142,7 +176,7 @@ describe('SSMSecretsReader', () => {
         '/test/KEY': 'value',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -160,7 +194,7 @@ describe('SSMSecretsReader', () => {
         '/test/KEY_B': 'b',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -179,7 +213,7 @@ describe('SSMSecretsReader', () => {
         '/test/DB_URL': 'postgres://localhost',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -195,7 +229,7 @@ describe('SSMSecretsReader', () => {
     it('returns empty record for empty names array without calling SSM', async () => {
       const client = createFakeSSMClient({});
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -210,7 +244,7 @@ describe('SSMSecretsReader', () => {
         '/test/FOUND': 'value',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -227,7 +261,7 @@ describe('SSMSecretsReader', () => {
         '/test/API_KEY': 'key123',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -243,7 +277,7 @@ describe('SSMSecretsReader', () => {
         '/test/API_KEY': 'key123',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -262,7 +296,7 @@ describe('SSMSecretsReader', () => {
         '/test/API_KEY': 'key123',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -278,17 +312,17 @@ describe('SSMSecretsReader', () => {
 
     it('returns fresh values after TTL re-fetch', async () => {
       let currentValue = 'original';
-      const client = {
-        send: vi.fn(async (command: any) => ({
+      const client = createFakeSSMClientWithSend(
+        vi.fn(async (command: FakeGetParametersCommand) => ({
           Parameters: command.input.Names.map((name: string) => ({
             Name: name,
             Value: currentValue,
           })),
           InvalidParameters: [],
         })),
-      };
+      );
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -310,7 +344,7 @@ describe('SSMSecretsReader', () => {
         '/test/KEY_B': 'b',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -326,7 +360,7 @@ describe('SSMSecretsReader', () => {
         '/test/KEY_B': 'b',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -342,7 +376,7 @@ describe('SSMSecretsReader', () => {
         '/test/KEY_B': 'b',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -359,7 +393,7 @@ describe('SSMSecretsReader', () => {
         '/test/API_KEY': 'key123',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -381,7 +415,7 @@ describe('SSMSecretsReader', () => {
         '/test/SECRET': 'value',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -396,8 +430,8 @@ describe('SSMSecretsReader', () => {
   describe('error recovery', () => {
     it('failed SSM fetch does not poison cache', async () => {
       let shouldFail = true;
-      const client = {
-        send: vi.fn(async (command: any) => {
+      const client = createFakeSSMClientWithSend(
+        vi.fn(async (command: FakeGetParametersCommand) => {
           if (shouldFail) {
             throw new Error('SSM connection timeout');
           }
@@ -409,9 +443,9 @@ describe('SSMSecretsReader', () => {
             InvalidParameters: [],
           };
         }),
-      };
+      );
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -430,8 +464,8 @@ describe('SSMSecretsReader', () => {
 
     it('successful fetch after failure is cached normally', async () => {
       let callCount = 0;
-      const client = {
-        send: vi.fn(async (command: any) => {
+      const client = createFakeSSMClientWithSend(
+        vi.fn(async (command: FakeGetParametersCommand) => {
           callCount++;
           if (callCount === 1) {
             throw new Error('transient failure');
@@ -444,9 +478,9 @@ describe('SSMSecretsReader', () => {
             InvalidParameters: [],
           };
         }),
-      };
+      );
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -466,8 +500,8 @@ describe('SSMSecretsReader', () => {
     it('does not cache partial results when second batch fails', async () => {
       let failOnBatch2 = true;
       let batchInCall = 0;
-      const client = {
-        send: vi.fn(async (command: any) => {
+      const client = createFakeSSMClientWithSend(
+        vi.fn(async (command: FakeGetParametersCommand) => {
           batchInCall++;
           // Fail on 2nd batch of each getAll call when flag is set
           if (failOnBatch2 && batchInCall % 2 === 0) {
@@ -481,9 +515,9 @@ describe('SSMSecretsReader', () => {
             InvalidParameters: [],
           };
         }),
-      };
+      );
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -509,7 +543,7 @@ describe('SSMSecretsReader', () => {
     it('caches result even when all secrets are missing', async () => {
       const client = createFakeSSMClient({}); // No secrets exist
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 
@@ -528,11 +562,11 @@ describe('SSMSecretsReader', () => {
       const clientB = createFakeSSMClient({ '/b/SECRET': 'from_b' });
 
       const readerA = new SSMSecretsReader({
-        client: clientA as any,
+        client: clientA,
         pathPrefix: '/a/',
       });
       const readerB = new SSMSecretsReader({
-        client: clientB as any,
+        client: clientB,
         pathPrefix: '/b/',
       });
 
@@ -552,7 +586,7 @@ describe('SSMSecretsReader', () => {
         '/test/KEY': 'value',
       });
       const reader = new SSMSecretsReader({
-        client: client as any,
+        client,
         pathPrefix: '/test/',
       });
 

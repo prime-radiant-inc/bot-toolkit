@@ -1,17 +1,22 @@
 // packages/bot-toolkit/src/native/__tests__/responder.test.ts
 
 import { describe, expect, it, vi } from 'vitest';
+import type { WebSocket } from 'ws';
 import { NativeResponder } from '../responder.js';
+
+function makeMockWebSocket(): WebSocket {
+  return {
+    readyState: 1,
+    send: vi.fn(),
+  } as unknown as WebSocket;
+}
 
 describe('NativeResponder', () => {
   describe('updateResponse', () => {
     it('sends text_delta to WebSocket when attached', async () => {
-      const mockWs = {
-        readyState: 1, // OPEN
-        send: vi.fn(),
-      };
+      const mockWs = makeMockWebSocket();
 
-      const responder = new NativeResponder('test-session', mockWs as any);
+      const responder = new NativeResponder('test-session', mockWs);
       await responder.updateResponse('Hello');
 
       expect(mockWs.send).toHaveBeenCalledWith(
@@ -36,12 +41,9 @@ describe('NativeResponder', () => {
     });
 
     it('computes deltas from full accumulated text', async () => {
-      const mockWs = {
-        readyState: 1,
-        send: vi.fn(),
-      };
+      const mockWs = makeMockWebSocket();
 
-      const responder = new NativeResponder('test-session', mockWs as any);
+      const responder = new NativeResponder('test-session', mockWs);
 
       await responder.updateResponse('Hello ');
       await responder.updateResponse('Hello World');
@@ -58,12 +60,9 @@ describe('NativeResponder', () => {
     });
 
     it('skips send when text has not changed', async () => {
-      const mockWs = {
-        readyState: 1,
-        send: vi.fn(),
-      };
+      const mockWs = makeMockWebSocket();
 
-      const responder = new NativeResponder('test-session', mockWs as any);
+      const responder = new NativeResponder('test-session', mockWs);
 
       await responder.updateResponse('Hello');
       await responder.updateResponse('Hello'); // duplicate (from onText after onTextDelta)
@@ -74,12 +73,9 @@ describe('NativeResponder', () => {
 
   describe('sendNotice', () => {
     it('sends notice to WebSocket', async () => {
-      const mockWs = {
-        readyState: 1,
-        send: vi.fn(),
-      };
+      const mockWs = makeMockWebSocket();
 
-      const responder = new NativeResponder('test-session', mockWs as any);
+      const responder = new NativeResponder('test-session', mockWs);
       await responder.sendNotice('Context compacted');
 
       expect(mockWs.send).toHaveBeenCalledWith(

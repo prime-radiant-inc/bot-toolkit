@@ -2,7 +2,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConversationOrchestrator } from '../orchestrator.js';
 import type { ITaskRegistry } from '../taskRegistry.types.js';
-import type { IncomingMessage, SessionStats } from '../types.js';
+import type { ConversationLogger } from '../conversationLogger.js';
+import type { ContextStore } from '../contextStore.js';
+import type { SessionDatabase } from '../database.js';
+import type {
+  IncomingMessage,
+  ISessionManager,
+  PlatformResponder,
+  SessionCallbacks,
+  SessionStats,
+} from '../types.js';
 
 // Unique ID counter to prevent thread lock collisions across tests
 let idCounter = 0;
@@ -50,7 +59,12 @@ function makeMockLogger() {
   };
 }
 
-function makeMockResponder(): Record<string, ReturnType<typeof vi.fn>> {
+type MockResponder = PlatformResponder & {
+  recordToolUse?: ReturnType<typeof vi.fn>;
+  setOnFirstOutput?: (callback: () => void) => void;
+};
+
+function makeMockResponder(): MockResponder {
   return {
     markProcessing: vi.fn(),
     clearProcessing: vi.fn(),
@@ -122,10 +136,12 @@ function makeOrchestrator(
 
   const orchestrator = new ConversationOrchestrator({
     dataDir: '/tmp/test',
-    sessionManager: sessionManager as any,
-    database: database as any,
-    conversationLogger: logger as any,
-    ...(contextStore && { contextStore: contextStore as any }),
+    sessionManager: sessionManager as unknown as ISessionManager,
+    database: database as unknown as SessionDatabase,
+    conversationLogger: logger as unknown as ConversationLogger,
+    ...(contextStore && {
+      contextStore: contextStore as unknown as ContextStore,
+    }),
     ...(taskRegistry && { taskRegistry }),
   });
 
@@ -144,7 +160,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(sessionManager.sendMessage).not.toHaveBeenCalled();
       expect(responder.markProcessing).not.toHaveBeenCalled();
@@ -156,7 +172,7 @@ describe('ConversationOrchestrator', () => {
       const responder = makeMockResponder();
       const msg = makeMessage();
 
-      await orchestrator.handleMessage(msg, responder as any);
+      await orchestrator.handleMessage(msg, responder);
 
       expect(database.markEventProcessed).toHaveBeenCalledWith(
         msg.messageId,
@@ -182,7 +198,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: '/new My Topic' }),
-        responder as any,
+        responder,
       );
 
       expect(sessionManager.sendMessage).not.toHaveBeenCalled();
@@ -195,7 +211,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: '/clear' }),
-        responder as any,
+        responder,
       );
 
       expect(sessionManager.sendMessage).not.toHaveBeenCalled();
@@ -210,7 +226,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: '/compact' }),
-        responder as any,
+        responder,
       );
 
       expect(sessionManager.sendMessage).not.toHaveBeenCalled();
@@ -225,7 +241,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: 'just a normal message' }),
-        responder as any,
+        responder,
       );
 
       expect(sessionManager.sendMessage).toHaveBeenCalled();
@@ -250,7 +266,7 @@ describe('ConversationOrchestrator', () => {
         return { sessionId: 'sess_1', text: 'ok', stats: makeStats() };
       });
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(callOrder.indexOf('markProcessing')).toBeLessThan(
         callOrder.indexOf('sendMessage'),
@@ -264,7 +280,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator();
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.finalizeResponse).toHaveBeenCalled();
       expect(responder.setTyping).toHaveBeenCalledWith(false);
@@ -284,7 +300,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.updateChannelStats).toHaveBeenCalledWith(stats);
     });
@@ -299,7 +315,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.markError).toHaveBeenCalled();
       expect(responder.sendNotice).toHaveBeenCalledWith(
@@ -315,7 +331,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.setTyping).toHaveBeenCalledWith(false);
       expect(responder.clearProcessing).toHaveBeenCalled();
@@ -329,7 +345,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.finalizeResponse).not.toHaveBeenCalled();
       expect(responder.updateChannelStats).not.toHaveBeenCalled();
@@ -349,7 +365,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ threadId: 'thread_root_1' }),
-        responder as any,
+        responder,
       );
 
       expect(sessionManager.getSessionFromEvent).toHaveBeenCalledWith(
@@ -370,7 +386,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ threadId: null }),
-        responder as any,
+        responder,
       );
 
       expect(sessionManager.getSessionFromEvent).not.toHaveBeenCalled();
@@ -388,7 +404,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ threadId: 'new_thread' }),
-        responder as any,
+        responder,
       );
 
       // 6th arg (resumeSession) should be undefined
@@ -412,7 +428,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('early_sess');
           return {
@@ -427,7 +443,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ threadId: 'thread_eager' }),
-        responder as any,
+        responder,
       );
 
       // First save should be the eager one with zero stats
@@ -454,7 +470,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('new_sess');
           return {
@@ -469,7 +485,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ threadId: 'thread_42' }),
-        responder as any,
+        responder,
       );
 
       // Should have been called twice: eager (zeros) + final (real stats)
@@ -505,7 +521,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_no_thread');
           return {
@@ -518,7 +534,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(msg, responder as any);
+      await orchestrator.handleMessage(msg, responder);
 
       // First save should use messageId as threadRootId
       expect(saveCallArgs[0]).toEqual([
@@ -544,7 +560,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('doomed_sess');
           throw new Error('SIGTERM or network failure');
@@ -555,7 +571,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ threadId: 'thread_doomed' }),
-        responder as any,
+        responder,
       );
 
       // Eager save should be the ONLY save (post-completion never reached)
@@ -582,7 +598,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       // No onSessionStart was invoked by the mock, AND result.sessionId is
       // undefined so the post-completion save is also skipped
@@ -607,7 +623,7 @@ describe('ConversationOrchestrator', () => {
         ],
       });
 
-      await orchestrator.handleMessage(msg, responder as any);
+      await orchestrator.handleMessage(msg, responder);
 
       expect(logger.logIncoming).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -632,7 +648,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(logger.logOutgoing).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -656,7 +672,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(logger.logOutgoing).not.toHaveBeenCalled();
     });
@@ -667,11 +683,7 @@ describe('ConversationOrchestrator', () => {
       const responder = makeMockResponder();
       const rawEvent = { type: 'm.room.message', event_id: '$xyz' };
 
-      await orchestrator.handleMessage(
-        makeMessage(),
-        responder as any,
-        rawEvent,
-      );
+      await orchestrator.handleMessage(makeMessage(), responder, rawEvent);
 
       expect(logger.logIncoming).toHaveBeenCalledWith(
         expect.objectContaining({ rawEvent }),
@@ -683,7 +695,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ logger });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(logger.logIncoming).toHaveBeenCalledWith(
         expect.objectContaining({ rawEvent: {} }),
@@ -697,7 +709,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ senderId: 'U123', senderName: 'Drew Ritter' }),
-        responder as any,
+        responder,
       );
 
       expect(logger.logIncoming).toHaveBeenCalledWith(
@@ -712,7 +724,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ senderId: 'U123' }),
-        responder as any,
+        responder,
       );
 
       expect(logger.logIncoming).toHaveBeenCalledWith(
@@ -739,7 +751,7 @@ describe('ConversationOrchestrator', () => {
             },
           ],
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -766,7 +778,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: 'What time is it?' }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -791,7 +803,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: 'Hello' }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -813,7 +825,7 @@ describe('ConversationOrchestrator', () => {
           senderName: 'Drew Ritter',
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -833,7 +845,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: 'Hello' }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -857,7 +869,7 @@ describe('ConversationOrchestrator', () => {
           senderName: 'Drew Ritter',
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -896,7 +908,7 @@ describe('ConversationOrchestrator', () => {
             },
           ],
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -933,7 +945,7 @@ describe('ConversationOrchestrator', () => {
           channelName: 'general',
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -952,7 +964,7 @@ describe('ConversationOrchestrator', () => {
           channelName: 'C12345',
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -978,7 +990,7 @@ describe('ConversationOrchestrator', () => {
           channelName: 'general',
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -1007,7 +1019,7 @@ describe('ConversationOrchestrator', () => {
           senderRole: 'delegate',
           text: 'Can you help me with something?',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -1048,7 +1060,7 @@ describe('ConversationOrchestrator', () => {
           senderRole: 'primary',
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -1073,7 +1085,7 @@ describe('ConversationOrchestrator', () => {
           // senderRole is undefined (not set)
           text: 'Hello',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -1105,7 +1117,7 @@ describe('ConversationOrchestrator', () => {
           channelName: 'general',
           text: 'Hello from delegate',
         }),
-        responder as any,
+        responder,
       );
 
       const sentMessage = sessionManager.sendMessage.mock
@@ -1142,7 +1154,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onText('Hello world');
           return {
@@ -1155,7 +1167,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.updateResponse).toHaveBeenCalledWith('Hello world');
     });
@@ -1168,7 +1180,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onToolUse('Read', { file_path: '/foo.ts' });
           return { sessionId: 'sess_1', text: 'ok', stats: makeStats() };
@@ -1177,7 +1189,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.recordToolUse).toHaveBeenCalledWith('Read', {
         file_path: '/foo.ts',
@@ -1192,7 +1204,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onFileSend('/tmp/output.png');
           return { sessionId: 'sess_1', text: 'ok', stats: makeStats() };
@@ -1201,7 +1213,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.sendFile).toHaveBeenCalledWith('/tmp/output.png');
     });
@@ -1214,7 +1226,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onCompaction({ preTokens: 150000, trigger: 'auto' });
           return { sessionId: 'sess_1', text: 'ok', stats: makeStats() };
@@ -1223,7 +1235,7 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.sendNotice).toHaveBeenCalledWith(
         expect.stringContaining('150k tokens'),
@@ -1238,7 +1250,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onToolUse('Read', {});
           return { sessionId: 'sess_1', text: 'ok', stats: makeStats() };
@@ -1247,10 +1259,10 @@ describe('ConversationOrchestrator', () => {
       const { orchestrator } = makeOrchestrator({ sessionManager });
       // Responder WITHOUT recordToolUse
       const responder = makeMockResponder();
-      delete (responder as any).recordToolUse;
+      delete responder.recordToolUse;
 
       // Should not throw
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
     });
   });
 
@@ -1267,7 +1279,7 @@ describe('ConversationOrchestrator', () => {
       fs.mkdirSync(outboxDir, { recursive: true });
       fs.writeFileSync(path.join(outboxDir, 'report.csv'), 'data');
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.sendFile).toHaveBeenCalledWith(
         path.join(outboxDir, 'report.csv'),
@@ -1298,7 +1310,7 @@ describe('ConversationOrchestrator', () => {
       fs.writeFileSync(path.join(outboxDir, 'bad-file.txt'), 'data');
 
       // Should complete without throwing
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       // Processing should still be cleared
       expect(responder.clearProcessing).toHaveBeenCalled();
@@ -1340,8 +1352,8 @@ describe('ConversationOrchestrator', () => {
       const responder2 = makeMockResponder();
 
       // Fire both messages concurrently
-      const p1 = orchestrator.handleMessage(msg1, responder1 as any);
-      const p2 = orchestrator.handleMessage(msg2, responder2 as any);
+      const p1 = orchestrator.handleMessage(msg1, responder1);
+      const p2 = orchestrator.handleMessage(msg2, responder2);
 
       // Let the event loop tick so p2 hits the lock
       await new Promise((r) => setTimeout(r, 10));
@@ -1381,8 +1393,8 @@ describe('ConversationOrchestrator', () => {
       const msg1 = makeMessage({ threadId: uniqueId('threadA') });
       const msg2 = makeMessage({ threadId: uniqueId('threadB') });
 
-      const p1 = orchestrator.handleMessage(msg1, makeMockResponder() as any);
-      const p2 = orchestrator.handleMessage(msg2, makeMockResponder() as any);
+      const p1 = orchestrator.handleMessage(msg1, makeMockResponder());
+      const p2 = orchestrator.handleMessage(msg2, makeMockResponder());
 
       // Give p2 a chance to start
       await new Promise((r) => setTimeout(r, 10));
@@ -1411,9 +1423,9 @@ describe('ConversationOrchestrator', () => {
       const msg2 = makeMessage({ threadId });
 
       // First message fails
-      await orchestrator.handleMessage(msg1, makeMockResponder() as any);
+      await orchestrator.handleMessage(msg1, makeMockResponder());
       // Second message should still proceed (lock was released)
-      await orchestrator.handleMessage(msg2, makeMockResponder() as any);
+      await orchestrator.handleMessage(msg2, makeMockResponder());
 
       expect(sessionManager.sendMessage).toHaveBeenCalledTimes(2);
     });
@@ -1425,7 +1437,7 @@ describe('ConversationOrchestrator', () => {
       const responder = makeMockResponder();
 
       // Should not throw when no taskRegistry configured
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.finalizeResponse).toHaveBeenCalled();
     });
@@ -1439,7 +1451,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_reg');
           return {
@@ -1457,7 +1469,7 @@ describe('ConversationOrchestrator', () => {
 
       await orchestrator.handleMessage(
         makeMessage({ text: 'do something' }),
-        responder as any,
+        responder,
       );
 
       expect(taskRegistry.register).toHaveBeenCalledWith(
@@ -1484,7 +1496,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_hb');
           await callbacks.onTextDelta('some text');
@@ -1502,7 +1514,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(taskRegistry.heartbeat).toHaveBeenCalledWith('sess_hb');
       expect(taskRegistry.heartbeat).toHaveBeenCalledTimes(2);
@@ -1524,7 +1536,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_vis');
           // Simulate the responder firing onFirstOutput after session is started
@@ -1541,7 +1553,7 @@ describe('ConversationOrchestrator', () => {
         taskRegistry,
       });
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(responder.setOnFirstOutput).toHaveBeenCalled();
       expect(taskRegistry.setHadVisibleOutput).toHaveBeenCalledWith('sess_vis');
@@ -1557,7 +1569,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_ok');
           return {
@@ -1573,7 +1585,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(taskRegistry.complete).toHaveBeenCalledWith('sess_ok', stats);
     });
@@ -1587,7 +1599,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_err');
           throw new Error('Claude exploded');
@@ -1599,7 +1611,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(taskRegistry.markError).toHaveBeenCalledWith(
         'sess_err',
@@ -1617,7 +1629,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_fin');
           return {
@@ -1633,7 +1645,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(taskRegistry.removeLiveEntry).toHaveBeenCalledWith('sess_fin');
     });
@@ -1647,7 +1659,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_err_fin');
           throw new Error('boom');
@@ -1659,7 +1671,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       expect(taskRegistry.removeLiveEntry).toHaveBeenCalledWith('sess_err_fin');
     });
@@ -1673,7 +1685,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       // sendMessage should be called with options containing abortController
       const lastCallArgs = sessionManager.sendMessage.mock.calls[0];
@@ -1693,7 +1705,7 @@ describe('ConversationOrchestrator', () => {
             _text: string,
             _platform: string,
             _channelName: string,
-            callbacks: any,
+            callbacks: SessionCallbacks,
           ) => {
             await callbacks.onSessionStart('sess_abort');
             const abortError = new Error('The operation was aborted');
@@ -1707,7 +1719,7 @@ describe('ConversationOrchestrator', () => {
         });
         const responder = makeMockResponder();
 
-        await orchestrator.handleMessage(makeMessage(), responder as any);
+        await orchestrator.handleMessage(makeMessage(), responder);
 
         // On abort: no error notice, no markError on responder
         expect(responder.sendNotice).not.toHaveBeenCalled();
@@ -1723,7 +1735,7 @@ describe('ConversationOrchestrator', () => {
             _text: string,
             _platform: string,
             _channelName: string,
-            callbacks: any,
+            callbacks: SessionCallbacks,
           ) => {
             await callbacks.onSessionStart('sess_abort2');
             const abortError = new Error('The operation was aborted');
@@ -1737,7 +1749,7 @@ describe('ConversationOrchestrator', () => {
         });
         const responder = makeMockResponder();
 
-        await orchestrator.handleMessage(makeMessage(), responder as any);
+        await orchestrator.handleMessage(makeMessage(), responder);
 
         // cancel_task owns the status write, orchestrator must NOT write on AbortError
         expect(taskRegistry.complete).not.toHaveBeenCalled();
@@ -1753,7 +1765,7 @@ describe('ConversationOrchestrator', () => {
             _text: string,
             _platform: string,
             _channelName: string,
-            callbacks: any,
+            callbacks: SessionCallbacks,
           ) => {
             await callbacks.onSessionStart('sess_abort3');
             const abortError = new Error('The operation was aborted');
@@ -1768,10 +1780,7 @@ describe('ConversationOrchestrator', () => {
         const responder = makeMockResponder();
         const threadId = uniqueId('thread_abort');
 
-        await orchestrator.handleMessage(
-          makeMessage({ threadId }),
-          responder as any,
-        );
+        await orchestrator.handleMessage(makeMessage({ threadId }), responder);
 
         // Should delete session so next message starts fresh
         expect(sessionManager.deleteEventSession).toHaveBeenCalledWith(
@@ -1788,7 +1797,7 @@ describe('ConversationOrchestrator', () => {
             _text: string,
             _platform: string,
             _channelName: string,
-            callbacks: any,
+            callbacks: SessionCallbacks,
           ) => {
             await callbacks.onSessionStart('sess_abort4');
             const abortError = new Error('The operation was aborted');
@@ -1802,7 +1811,7 @@ describe('ConversationOrchestrator', () => {
         });
         const responder = makeMockResponder();
 
-        await orchestrator.handleMessage(makeMessage(), responder as any);
+        await orchestrator.handleMessage(makeMessage(), responder);
 
         expect(taskRegistry.removeLiveEntry).toHaveBeenCalledWith(
           'sess_abort4',
@@ -1819,7 +1828,7 @@ describe('ConversationOrchestrator', () => {
             _text: string,
             _platform: string,
             _channelName: string,
-            callbacks: any,
+            callbacks: SessionCallbacks,
           ) => {
             callCount++;
             await callbacks.onSessionStart(`sess_lock_${callCount}`);
@@ -1844,12 +1853,12 @@ describe('ConversationOrchestrator', () => {
         // First message aborted
         await orchestrator.handleMessage(
           makeMessage({ threadId }),
-          makeMockResponder() as any,
+          makeMockResponder(),
         );
         // Second message should still proceed (lock was released)
         await orchestrator.handleMessage(
           makeMessage({ threadId }),
-          makeMockResponder() as any,
+          makeMockResponder(),
         );
 
         expect(sessionManager.sendMessage).toHaveBeenCalledTimes(2);
@@ -1871,7 +1880,7 @@ describe('ConversationOrchestrator', () => {
       });
       const responder = makeMockResponder();
 
-      await orchestrator.handleMessage(makeMessage(), responder as any);
+      await orchestrator.handleMessage(makeMessage(), responder);
 
       // No sessionId was captured so no registry calls should happen
       expect(taskRegistry.register).not.toHaveBeenCalled();
@@ -1888,7 +1897,7 @@ describe('ConversationOrchestrator', () => {
           _text: string,
           _platform: string,
           _channelName: string,
-          callbacks: any,
+          callbacks: SessionCallbacks,
         ) => {
           await callbacks.onSessionStart('sess_sched');
           return {
@@ -1909,7 +1918,7 @@ describe('ConversationOrchestrator', () => {
           text: 'scheduled task',
           senderId: 'scheduler',
         }),
-        responder as any,
+        responder,
         undefined, // rawEvent
         { origin: 'scheduled', schedulerJobId: 'job-42' },
       );

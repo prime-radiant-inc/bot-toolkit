@@ -305,7 +305,8 @@ function createRoomClaudeMd(roomDir: string, info: RoomInfo): void {
       platformLabel = 'Email';
       break;
     default:
-      platformLabel = info.platform.charAt(0).toUpperCase() + info.platform.slice(1);
+      platformLabel =
+        info.platform.charAt(0).toUpperCase() + info.platform.slice(1);
       break;
   }
 

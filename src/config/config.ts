@@ -17,14 +17,6 @@ export interface Config {
   useAgentSDK: boolean; // Feature flag: use Agent SDK instead of CLI spawning
 }
 
-function getRequiredEnv(key: string): string {
-  const value = process.env[key];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-  return value;
-}
-
 export function loadConfig(): Config {
   const databasePath =
     process.env.DATABASE_PATH || './data/infrastructure/sessions.db';

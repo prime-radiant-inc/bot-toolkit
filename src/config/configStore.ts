@@ -11,6 +11,9 @@ import type {
   ResolvedPlugin,
   SecretsReader,
 } from './configTypes.js';
+import { Logger } from '../utils/logger.js';
+
+const logger = new Logger('ConfigStore');
 
 /** Pre-normalization MCP entry as it appears in instance.json */
 interface RawMcpEntry {
@@ -159,9 +162,10 @@ export class ConfigStore {
         );
 
         if (unresolvedVars.length > 0) {
-          console.warn(
-            `[ConfigStore] Skipping remote MCP "${id}": unresolved template vars: ${unresolvedVars.join(', ')}`,
-          );
+          logger.warn('Skipping remote MCP with unresolved template vars', {
+            id,
+            unresolvedVars,
+          });
           continue;
         }
 

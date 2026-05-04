@@ -23,7 +23,10 @@ class TestAdapter extends BaseAdapter {
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
 
-  async handleWakeup(channelId: string, payload: WakeupPayload): Promise<void> {
+  async handleWakeup(
+    _channelId: string,
+    _payload: WakeupPayload,
+  ): Promise<void> {
     // Test implementation
   }
 

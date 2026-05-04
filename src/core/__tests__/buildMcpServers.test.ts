@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { ResolvedMcp } from '../../config/configTypes.js';
 import { buildMcpServers } from '../sessionManagerSDK.js';
+
+interface UnknownResolvedMcp {
+  id: string;
+  type: string;
+  url: string;
+}
 
 describe('buildMcpServers', () => {
   const platformEnv = {
@@ -8,7 +15,7 @@ describe('buildMcpServers', () => {
   };
 
   it('stdio MCP produces { command, args, env } shape (no type field)', () => {
-    const mcps = [
+    const mcps: ResolvedMcp[] = [
       {
         id: 'local',
         type: 'stdio' as const,
@@ -29,7 +36,7 @@ describe('buildMcpServers', () => {
   });
 
   it('remote HTTP MCP produces { type, url, headers } shape', () => {
-    const mcps = [
+    const mcps: ResolvedMcp[] = [
       {
         id: 'linear',
         type: 'http' as const,
@@ -38,7 +45,7 @@ describe('buildMcpServers', () => {
       },
     ];
 
-    const result = buildMcpServers(mcps as any, platformEnv);
+    const result = buildMcpServers(mcps, platformEnv);
 
     expect(result.linear).toEqual({
       type: 'http',
@@ -48,7 +55,7 @@ describe('buildMcpServers', () => {
   });
 
   it('remote SSE MCP produces { type, url, headers } shape', () => {
-    const mcps = [
+    const mcps: ResolvedMcp[] = [
       {
         id: 'notion',
         type: 'sse' as const,
@@ -57,7 +64,7 @@ describe('buildMcpServers', () => {
       },
     ];
 
-    const result = buildMcpServers(mcps as any, platformEnv);
+    const result = buildMcpServers(mcps, platformEnv);
 
     expect(result.notion).toEqual({
       type: 'sse',
@@ -67,7 +74,7 @@ describe('buildMcpServers', () => {
   });
 
   it('stdio env includes platformEnv; remote does not', () => {
-    const mcps = [
+    const mcps: ResolvedMcp[] = [
       {
         id: 'local',
         type: 'stdio' as const,
@@ -83,14 +90,14 @@ describe('buildMcpServers', () => {
       },
     ];
 
-    const result = buildMcpServers(mcps as any, platformEnv);
+    const result = buildMcpServers(mcps, platformEnv);
 
     expect(result.local.env).toEqual(platformEnv);
     expect(result.remote).not.toHaveProperty('env');
   });
 
   it('mixed array produces correct shapes for each type', () => {
-    const mcps = [
+    const mcps: ResolvedMcp[] = [
       {
         id: 'stdio1',
         type: 'stdio' as const,
@@ -112,7 +119,7 @@ describe('buildMcpServers', () => {
       },
     ];
 
-    const result = buildMcpServers(mcps as any, platformEnv);
+    const result = buildMcpServers(mcps, platformEnv);
 
     expect(Object.keys(result)).toHaveLength(3);
     expect(result.stdio1).toHaveProperty('command');
@@ -123,7 +130,7 @@ describe('buildMcpServers', () => {
   });
 
   it('unknown type value is silently skipped', () => {
-    const mcps = [
+    const mcps: UnknownResolvedMcp[] = [
       {
         id: 'weird',
         type: 'unknown-type',
@@ -131,7 +138,10 @@ describe('buildMcpServers', () => {
       },
     ];
 
-    const result = buildMcpServers(mcps as any, platformEnv);
+    const result = buildMcpServers(
+      mcps as unknown as ResolvedMcp[],
+      platformEnv,
+    );
 
     expect(Object.keys(result)).toHaveLength(0);
   });
