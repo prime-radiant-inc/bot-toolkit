@@ -8,15 +8,48 @@ import { Logger } from '../utils/logger.js';
 import type { NativeSession, NativeSessionMetadata } from './types.js';
 
 const logger = new Logger('NativeSessionManager');
+const UUID_SESSION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const METADATA_FILENAME = 'metadata.json';
+const O_NOFOLLOW =
+  (fs.constants as typeof fs.constants & { O_NOFOLLOW?: number }).O_NOFOLLOW ??
+  0;
+
+function isConfinedPath(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return (
+    relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+  );
+}
+
+function chmodBestEffort(targetPath: string, mode: number): void {
+  try {
+    fs.chmodSync(targetPath, mode);
+  } catch {
+    // Ignore filesystems that do not support POSIX permissions.
+  }
+}
+
+function fchmodBestEffort(fd: number, mode: number): void {
+  try {
+    fs.fchmodSync(fd, mode);
+  } catch {
+    // Ignore filesystems that do not support POSIX permissions.
+  }
+}
+
+function readFileDescriptorUtf8(fd: number): string {
+  return fs.readFileSync(fd, { encoding: 'utf-8' });
+}
 
 export class NativeSessionManager {
   private readonly baseDataDir: string;
-  private sessionsDir: string;
+  private readonly sessionsDir: string;
   private attachedSessions = new Map<string, WebSocket>();
 
   constructor(dataDir: string) {
-    this.baseDataDir = dataDir;
-    this.sessionsDir = path.join(dataDir, 'sessions');
+    this.baseDataDir = path.resolve(dataDir);
+    this.sessionsDir = path.resolve(this.baseDataDir, 'sessions');
   }
 
   get dataDir(): string {
@@ -27,8 +60,12 @@ export class NativeSessionManager {
     const id = crypto.randomUUID();
     const now = new Date();
 
-    const sessionDir = path.join(this.sessionsDir, id);
-    fs.mkdirSync(sessionDir, { recursive: true });
+    fs.mkdirSync(this.sessionsDir, { recursive: true, mode: 0o700 });
+    chmodBestEffort(this.sessionsDir, 0o700);
+
+    const sessionDir = this.requireSessionDirectory(id);
+    fs.mkdirSync(sessionDir, { mode: 0o700 });
+    chmodBestEffort(sessionDir, 0o700);
 
     const metadata: NativeSessionMetadata = {
       id,
@@ -36,10 +73,12 @@ export class NativeSessionManager {
       last_activity: now.toISOString(),
     };
 
-    fs.writeFileSync(
-      path.join(sessionDir, 'metadata.json'),
-      JSON.stringify(metadata, null, 2),
-    );
+    const metadataPath = path.join(sessionDir, METADATA_FILENAME);
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), {
+      mode: 0o600,
+      flag: 'wx',
+    });
+    chmodBestEffort(metadataPath, 0o600);
 
     logger.info('Created native session', { id });
 
@@ -73,33 +112,28 @@ export class NativeSessionManager {
   }
 
   async getSession(id: string): Promise<NativeSession | null> {
-    const metadataPath = path.join(this.sessionsDir, id, 'metadata.json');
-
-    if (!fs.existsSync(metadataPath)) {
+    const sessionDir = this.getSafeExistingSessionDirectory(id);
+    if (!sessionDir) {
       return null;
     }
 
-    try {
-      const metadata: NativeSessionMetadata = JSON.parse(
-        fs.readFileSync(metadataPath, 'utf-8'),
-      );
-
-      return {
-        id: metadata.id,
-        createdAt: new Date(metadata.created_at),
-        lastActivity: new Date(metadata.last_activity),
-        sdkSessionId: metadata.sdk_session_id,
-      };
-    } catch {
-      logger.error('Failed to read session metadata', { id });
+    const metadata = this.readSessionMetadata(id, sessionDir);
+    if (!metadata) {
       return null;
     }
+
+    return {
+      id: metadata.id,
+      createdAt: new Date(metadata.created_at),
+      lastActivity: new Date(metadata.last_activity),
+      sdkSessionId: metadata.sdk_session_id,
+    };
   }
 
   async deleteSession(id: string): Promise<void> {
-    const sessionDir = path.join(this.sessionsDir, id);
+    const sessionDir = this.getSafeExistingSessionDirectory(id);
 
-    if (fs.existsSync(sessionDir)) {
+    if (sessionDir) {
       fs.rmSync(sessionDir, { recursive: true, force: true });
       logger.info('Deleted native session', { id });
     }
@@ -112,30 +146,165 @@ export class NativeSessionManager {
     id: string,
     sdkSessionId?: string,
   ): Promise<void> {
-    const metadataPath = path.join(this.sessionsDir, id, 'metadata.json');
-
-    if (!fs.existsSync(metadataPath)) {
+    const sessionDir = this.getSafeExistingSessionDirectory(id);
+    if (!sessionDir) {
       return;
     }
 
     try {
-      const metadata: NativeSessionMetadata = JSON.parse(
-        fs.readFileSync(metadataPath, 'utf-8'),
-      );
+      const metadata = this.readSessionMetadata(id, sessionDir);
+      if (!metadata) {
+        return;
+      }
 
       metadata.last_activity = new Date().toISOString();
       if (sdkSessionId) {
         metadata.sdk_session_id = sdkSessionId;
       }
 
-      fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+      this.writeSessionMetadata(sessionDir, metadata);
     } catch {
       logger.error('Failed to update session activity', { id });
     }
   }
 
   getSessionDirectory(id: string): string {
-    return path.join(this.sessionsDir, id);
+    return this.requireSessionDirectory(id);
+  }
+
+  private requireSessionDirectory(id: string): string {
+    const sessionDir = this.getSafeSessionDirectory(id);
+    if (!sessionDir) {
+      throw new Error('Invalid native session ID');
+    }
+    return sessionDir;
+  }
+
+  private getSafeSessionDirectory(id: string): string | null {
+    if (!UUID_SESSION_ID_PATTERN.test(id)) {
+      return null;
+    }
+
+    const sessionDir = path.resolve(this.sessionsDir, id);
+    if (!isConfinedPath(this.sessionsDir, sessionDir)) {
+      return null;
+    }
+
+    return sessionDir;
+  }
+
+  private getSafeExistingSessionDirectory(id: string): string | null {
+    const sessionDir = this.getSafeSessionDirectory(id);
+    if (!sessionDir) {
+      return null;
+    }
+
+    try {
+      const sessionStat = fs.lstatSync(sessionDir);
+      if (!sessionStat.isDirectory() || sessionStat.isSymbolicLink()) {
+        return null;
+      }
+
+      const realSessionsDir = fs.realpathSync(this.sessionsDir);
+      const realSessionDir = fs.realpathSync(sessionDir);
+      if (!isConfinedPath(realSessionsDir, realSessionDir)) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+
+    return sessionDir;
+  }
+
+  private getSafeMetadataPath(sessionDir: string): string | null {
+    const metadataPath = path.join(sessionDir, METADATA_FILENAME);
+
+    try {
+      const metadataStat = fs.lstatSync(metadataPath);
+      if (
+        !metadataStat.isFile() ||
+        metadataStat.isSymbolicLink() ||
+        metadataStat.nlink !== 1
+      ) {
+        return null;
+      }
+
+      const realSessionDir = fs.realpathSync(sessionDir);
+      const realMetadataPath = fs.realpathSync(metadataPath);
+      if (!isConfinedPath(realSessionDir, realMetadataPath)) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+
+    return metadataPath;
+  }
+
+  private readSessionMetadata(
+    id: string,
+    sessionDir: string,
+  ): NativeSessionMetadata | null {
+    const metadataPath = this.getSafeMetadataPath(sessionDir);
+    if (!metadataPath) {
+      return null;
+    }
+
+    let fd: number | null = null;
+    try {
+      fd = fs.openSync(metadataPath, fs.constants.O_RDONLY | O_NOFOLLOW);
+      const fdStat = fs.fstatSync(fd);
+      if (!fdStat.isFile() || fdStat.nlink !== 1) {
+        return null;
+      }
+
+      const metadata: NativeSessionMetadata = JSON.parse(
+        readFileDescriptorUtf8(fd),
+      );
+
+      if (metadata.id !== id) {
+        logger.error('Session metadata ID mismatch', { id });
+        return null;
+      }
+
+      return metadata;
+    } catch {
+      logger.error('Failed to read session metadata', { id });
+      return null;
+    } finally {
+      if (fd !== null) {
+        fs.closeSync(fd);
+      }
+    }
+  }
+
+  private writeSessionMetadata(
+    sessionDir: string,
+    metadata: NativeSessionMetadata,
+  ): void {
+    const metadataPath = this.getSafeMetadataPath(sessionDir);
+    if (!metadataPath) {
+      return;
+    }
+
+    let fd: number | null = null;
+    try {
+      fd = fs.openSync(metadataPath, fs.constants.O_RDWR | O_NOFOLLOW);
+      const fdStat = fs.fstatSync(fd);
+      if (!fdStat.isFile() || fdStat.nlink !== 1) {
+        return;
+      }
+
+      const body = `${JSON.stringify(metadata, null, 2)}\n`;
+      fs.ftruncateSync(fd, 0);
+      fs.writeSync(fd, body, 0, 'utf-8');
+      fchmodBestEffort(fd, 0o600);
+    } finally {
+      if (fd !== null) {
+        fs.closeSync(fd);
+      }
+    }
   }
 
   // Attach/detach management

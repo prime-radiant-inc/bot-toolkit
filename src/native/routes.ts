@@ -59,7 +59,6 @@ export function createNativeRoutes(
         last_activity: session.lastActivity.toISOString(),
         attached: sessionManager.isAttached(session.id),
         sdk_session_id: session.sdkSessionId,
-        directory: sessionManager.getSessionDirectory(session.id),
       });
     } catch (error) {
       logger.error('Failed to get session', { error, id: req.params.id });
@@ -81,9 +80,13 @@ export function createNativeRoutes(
   // Create a native room
   router.post('/rooms', (req, res) => {
     try {
-      const { slug, name } = req.body as { slug?: string; name?: string };
-      if (!slug || !name) {
+      const { slug, name } = req.body as { slug?: unknown; name?: unknown };
+      if (typeof slug !== 'string' || typeof name !== 'string') {
         res.status(400).json({ error: 'slug and name are required' });
+        return;
+      }
+      if (slug.trim().length === 0 || name.trim().length === 0) {
+        res.status(400).json({ error: 'slug and name cannot be empty' });
         return;
       }
 

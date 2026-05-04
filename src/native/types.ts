@@ -25,6 +25,8 @@ export interface AttachedSession {
 export interface WSInputMessage {
   type: 'input';
   text: string;
+  roomSlug?: string;
+  roomName?: string;
 }
 
 export interface WSSignalMessage {
@@ -76,6 +78,17 @@ export interface WSErrorMessage {
   message: string;
 }
 
+export interface WSNoticeMessage {
+  type: 'notice';
+  content: string;
+}
+
+export interface WSFileMessage {
+  type: 'file';
+  path: string;
+  filename?: string;
+}
+
 export type WSServerMessage =
   | WSHistoryMessage
   | WSMissedWakeupMessage
@@ -83,4 +96,6 @@ export type WSServerMessage =
   | WSThinkingMessage
   | WSToolUseMessage
   | WSCompleteMessage
+  | WSNoticeMessage
+  | WSFileMessage
   | WSErrorMessage;

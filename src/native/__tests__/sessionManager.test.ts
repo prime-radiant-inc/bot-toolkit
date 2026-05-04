@@ -49,6 +49,15 @@ describe('NativeSessionManager', () => {
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
       expect(metadata.id).toBe(session.id);
     });
+
+    it('creates session directories and metadata files with restrictive modes', async () => {
+      const session = await manager.createSession();
+      const sessionDir = path.join(tempDir, 'sessions', session.id);
+      const metadataPath = path.join(sessionDir, 'metadata.json');
+
+      expect(fs.statSync(sessionDir).mode & 0o077).toBe(0);
+      expect(fs.statSync(metadataPath).mode & 0o077).toBe(0);
+    });
   });
 
   describe('listSessions', () => {
@@ -79,6 +88,71 @@ describe('NativeSessionManager', () => {
       expect(retrieved).not.toBeNull();
       expect(retrieved!.id).toBe(created.id);
     });
+
+    it('rejects traversal IDs instead of reading outside the sessions directory', async () => {
+      const outsideDir = path.join(tempDir, 'outside');
+      fs.mkdirSync(outsideDir);
+      fs.writeFileSync(
+        path.join(outsideDir, 'metadata.json'),
+        JSON.stringify({
+          id: '../outside',
+          created_at: '2026-05-03T00:00:00.000Z',
+          last_activity: '2026-05-03T00:00:00.000Z',
+        }),
+      );
+
+      await expect(manager.getSession('../outside')).resolves.toBeNull();
+    });
+
+    it('returns null for invalid non-UUID IDs', async () => {
+      await expect(manager.getSession('not-a-uuid')).resolves.toBeNull();
+    });
+
+    it('does not read metadata through a symlink outside the sessions directory', async () => {
+      const session = await manager.createSession();
+      const metadataPath = path.join(
+        tempDir,
+        'sessions',
+        session.id,
+        'metadata.json',
+      );
+      const outsideMetadataPath = path.join(tempDir, 'outside-metadata.json');
+      fs.writeFileSync(
+        outsideMetadataPath,
+        JSON.stringify({
+          id: session.id,
+          created_at: '2026-05-03T00:00:00.000Z',
+          last_activity: '2026-05-03T00:00:00.000Z',
+        }),
+      );
+      fs.rmSync(metadataPath);
+      fs.symlinkSync(outsideMetadataPath, metadataPath);
+
+      await expect(manager.getSession(session.id)).resolves.toBeNull();
+    });
+
+    it('does not read metadata through a hard link to a file outside the sessions directory', async () => {
+      const session = await manager.createSession();
+      const metadataPath = path.join(
+        tempDir,
+        'sessions',
+        session.id,
+        'metadata.json',
+      );
+      const outsideMetadataPath = path.join(tempDir, 'outside-metadata.json');
+      fs.writeFileSync(
+        outsideMetadataPath,
+        JSON.stringify({
+          id: session.id,
+          created_at: '2026-05-03T00:00:00.000Z',
+          last_activity: '2026-05-03T00:00:00.000Z',
+        }),
+      );
+      fs.rmSync(metadataPath);
+      fs.linkSync(outsideMetadataPath, metadataPath);
+
+      await expect(manager.getSession(session.id)).resolves.toBeNull();
+    });
   });
 
   describe('deleteSession', () => {
@@ -102,6 +176,23 @@ describe('NativeSessionManager', () => {
 
       expect(manager.isAttached(session.id)).toBe(false);
       expect(manager.getAttachedSocket(session.id)).toBeUndefined();
+    });
+
+    it('rejects traversal IDs instead of deleting outside the sessions directory', async () => {
+      const outsideDir = path.join(tempDir, 'outside');
+      fs.mkdirSync(outsideDir);
+
+      await expect(
+        manager.deleteSession('../outside'),
+      ).resolves.toBeUndefined();
+
+      expect(fs.existsSync(outsideDir)).toBe(true);
+    });
+
+    it('handles invalid non-UUID IDs safely', async () => {
+      await expect(
+        manager.deleteSession('not-a-uuid'),
+      ).resolves.toBeUndefined();
     });
   });
 
@@ -156,6 +247,107 @@ describe('NativeSessionManager', () => {
       await expect(
         manager.updateSessionActivity(session.id),
       ).resolves.toBeUndefined();
+    });
+
+    it('rejects traversal IDs instead of updating outside the sessions directory', async () => {
+      const metadataPath = path.join(tempDir, 'outside', 'metadata.json');
+      fs.mkdirSync(path.dirname(metadataPath));
+      fs.writeFileSync(
+        metadataPath,
+        JSON.stringify({
+          id: '../outside',
+          created_at: '2026-05-03T00:00:00.000Z',
+          last_activity: '2026-05-03T00:00:00.000Z',
+        }),
+      );
+
+      await expect(
+        manager.updateSessionActivity('../outside', 'sdk-outside'),
+      ).resolves.toBeUndefined();
+
+      const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+      expect(metadata.sdk_session_id).toBeUndefined();
+      expect(metadata.last_activity).toBe('2026-05-03T00:00:00.000Z');
+    });
+
+    it('handles invalid non-UUID IDs safely', async () => {
+      await expect(
+        manager.updateSessionActivity('not-a-uuid'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not update metadata through a symlink outside the sessions directory', async () => {
+      const session = await manager.createSession();
+      const metadataPath = path.join(
+        tempDir,
+        'sessions',
+        session.id,
+        'metadata.json',
+      );
+      const outsideMetadataPath = path.join(tempDir, 'outside-metadata.json');
+      const outsideMetadata = {
+        id: session.id,
+        created_at: '2026-05-03T00:00:00.000Z',
+        last_activity: '2026-05-03T00:00:00.000Z',
+      };
+      fs.writeFileSync(outsideMetadataPath, JSON.stringify(outsideMetadata));
+      fs.rmSync(metadataPath);
+      fs.symlinkSync(outsideMetadataPath, metadataPath);
+
+      await expect(
+        manager.updateSessionActivity(session.id, 'sdk-outside'),
+      ).resolves.toBeUndefined();
+
+      const metadata = JSON.parse(
+        fs.readFileSync(outsideMetadataPath, 'utf-8'),
+      );
+      expect(metadata).toEqual(outsideMetadata);
+    });
+
+    it('does not update metadata through a hard link to a file outside the sessions directory', async () => {
+      const session = await manager.createSession();
+      const metadataPath = path.join(
+        tempDir,
+        'sessions',
+        session.id,
+        'metadata.json',
+      );
+      const outsideMetadataPath = path.join(tempDir, 'outside-metadata.json');
+      const outsideMetadata = {
+        id: session.id,
+        created_at: '2026-05-03T00:00:00.000Z',
+        last_activity: '2026-05-03T00:00:00.000Z',
+      };
+      fs.writeFileSync(outsideMetadataPath, JSON.stringify(outsideMetadata));
+      fs.rmSync(metadataPath);
+      fs.linkSync(outsideMetadataPath, metadataPath);
+
+      await expect(
+        manager.updateSessionActivity(session.id, 'sdk-outside'),
+      ).resolves.toBeUndefined();
+
+      const metadata = JSON.parse(
+        fs.readFileSync(outsideMetadataPath, 'utf-8'),
+      );
+      expect(metadata).toEqual(outsideMetadata);
+    });
+  });
+
+  describe('getSessionDirectory', () => {
+    it('returns a confined path for valid session IDs', async () => {
+      const session = await manager.createSession();
+      const sessionDir = manager.getSessionDirectory(session.id);
+
+      expect(sessionDir).toBe(path.join(tempDir, 'sessions', session.id));
+    });
+
+    it('throws for invalid session IDs', () => {
+      expect(() => manager.getSessionDirectory('../outside')).toThrow(
+        /Invalid native session ID/,
+      );
+      expect(() => manager.getSessionDirectory('not-a-uuid')).toThrow(
+        /Invalid native session ID/,
+      );
     });
   });
 

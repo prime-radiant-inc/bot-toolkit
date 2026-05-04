@@ -6,8 +6,11 @@ import expressWs from 'express-ws';
 import type { WebSocket } from 'ws';
 import type { ContextStore } from '../core/contextStore.js';
 import type { SessionDatabase } from '../core/database.js';
-import type { ConversationOrchestrator } from '../core/orchestrator.js';
-import type { PlatformAdapter, WakeupPayload } from '../core/types.js';
+import type {
+  MessageOrchestrator,
+  PlatformAdapter,
+  WakeupPayload,
+} from '../core/types.js';
 import { NativeResponder } from '../native/responder.js';
 import { createNativeRoutes } from '../native/routes.js';
 import type { NativeSessionManager } from '../native/sessionManager.js';
@@ -25,14 +28,46 @@ export interface WakeupServerConfig {
   /** Optional native session manager for native chat API support */
   nativeSessionManager?: NativeSessionManager;
   /** Optional orchestrator for native chat message handling */
-  orchestrator?: ConversationOrchestrator;
+  orchestrator?: MessageOrchestrator;
+  /** Optional bearer token required for wakeup, notify, and native control routes */
+  authToken?: string;
+  /** Host the wakeup server will bind to. Defaults to loopback. */
+  host?: string;
 }
 
 // Known platform prefixes for room_id parsing
 const KNOWN_PLATFORMS = ['slack', 'native', 'email'];
 
+function requireBearerToken(authToken: string): Router {
+  const router = express.Router();
+
+  router.use((req, res, next) => {
+    const expected = `Bearer ${authToken}`;
+    if (req.header('authorization') !== expected) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    next();
+  });
+
+  return router;
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
+function requireAuthForHost(host: string, authToken: string | undefined): void {
+  if (!isLoopbackHost(host) && !authToken) {
+    throw new Error(
+      'authToken is required when wakeup server host is not loopback',
+    );
+  }
+}
+
 function parseRoomId(roomId: string): { platform: string; channelId: string } {
-  // Check for known platform prefix (e.g., "slack:C12345" or "matrix:!room:server")
+  // Check for known platform prefix (e.g., "slack:C12345" or "native:session-id")
   for (const platform of KNOWN_PLATFORMS) {
     const prefix = `${platform}:`;
     if (roomId.startsWith(prefix)) {
@@ -40,16 +75,7 @@ function parseRoomId(roomId: string): { platform: string; channelId: string } {
     }
   }
 
-  // Check if it looks like a platform:channel format (lowercase letters followed by colon)
-  // This catches unknown platforms like "discord:channel123"
-  const platformMatch = roomId.match(/^([a-z]+):/);
-  if (platformMatch?.[1]) {
-    const platform = platformMatch[1];
-    const channelId = roomId.slice(platform.length + 1);
-    return { platform, channelId };
-  }
-
-  // No prefix - unknown format
+  // No supported prefix - unknown format.
   return { platform: 'unknown', channelId: roomId };
 }
 
@@ -61,7 +87,11 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
     additionalRoutes,
     nativeSessionManager,
     orchestrator,
+    authToken,
   } = config;
+  const host = config.host ?? '127.0.0.1';
+  requireAuthForHost(host, authToken);
+
   const app = express();
 
   // Clean up old wakeup dedup entries on startup (24h TTL)
@@ -81,14 +111,56 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
   // Increase body size limit for Health Auto Export which sends large payloads
   app.use(express.json({ limit: '10mb' }));
 
+  const protectedRoutes = authToken ? requireBearerToken(authToken) : undefined;
+  const authMiddleware = protectedRoutes ? [protectedRoutes] : [];
+
   // Mount additional routes if provided (e.g., context routes)
   if (additionalRoutes) {
     app.use(additionalRoutes);
     logger.info('Additional routes mounted');
   }
 
-  app.post('/wakeup', async (req, res) => {
+  app.post('/wakeup', ...authMiddleware, async (req, res) => {
     const payload = req.body as WakeupPayload & { room_id: string };
+
+    const roomId = payload.room_id;
+    if (typeof roomId !== 'string' || roomId.length === 0) {
+      logger.error('Wakeup rejected: room_id is required', {
+        job_id: payload.job_id,
+      });
+      res.status(400).json({
+        status: 'error',
+        error: 'room_id is required',
+      });
+      return;
+    }
+
+    if (
+      typeof payload.idempotency_key !== 'string' ||
+      payload.idempotency_key.length === 0
+    ) {
+      logger.error('Wakeup rejected: idempotency_key is required', {
+        job_id: payload.job_id,
+      });
+      res.status(400).json({
+        status: 'error',
+        error: 'idempotency_key is required',
+      });
+      return;
+    }
+
+    // Parse platform from room_id (format: "platform:channelId")
+    const { platform, channelId } = parseRoomId(roomId);
+
+    const adapter = adapters.get(platform);
+    if (!adapter) {
+      logger.error('Unknown platform', { platform, roomId });
+      res.status(400).json({
+        status: 'error',
+        error: `Unknown platform: ${platform}. Valid platforms: ${Array.from(adapters.keys()).join(', ')}`,
+      });
+      return;
+    }
 
     // Idempotency check (only when database is configured)
     // Wrapped in try/catch so DB errors degrade to no-dedup rather than blocking wakeups
@@ -116,34 +188,9 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
       }
     }
 
-    const roomId = payload.room_id;
-    if (!roomId) {
-      logger.error('Wakeup rejected: room_id is required', {
-        job_id: payload.job_id,
-      });
-      res.status(400).json({
-        status: 'error',
-        error: 'room_id is required',
-      });
-      return;
-    }
-
-    // Parse platform from room_id (format: "platform:channelId" or legacy Matrix format)
-    const { platform, channelId } = parseRoomId(roomId);
-
-    const adapter = adapters.get(platform);
-    if (!adapter) {
-      logger.error('Unknown platform', { platform, roomId });
-      res.status(400).json({
-        status: 'error',
-        error: `Unknown platform: ${platform}. Valid platforms: ${Array.from(adapters.keys()).join(', ')}`,
-      });
-      return;
-    }
-
     logger.info('Processing wakeup', {
       job_id: payload.job_id,
-      prompt: payload.prompt.substring(0, 100),
+      prompt_length: payload.prompt.length,
       platform,
       channel_id: channelId,
       thread_id: payload.thread_id,
@@ -220,7 +267,7 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
   });
 
   // Simple notification endpoint - sends a message to a room without Claude processing
-  app.post('/notify', async (req, res) => {
+  app.post('/notify', ...authMiddleware, async (req, res) => {
     const { room_id, message } = req.body;
 
     if (!room_id || !message) {
@@ -244,7 +291,7 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
       logger.info('Sending notification', {
         platform,
         channelId,
-        message_preview: message.substring(0, 100),
+        message_length: message.length,
       });
       // For notifications, we create a simple wakeup that doesn't go through Claude
       // The adapter's handleWakeup will send the message directly
@@ -269,12 +316,9 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
     }
   });
 
-  // Native chat API routes (HTTP)
   if (nativeSessionManager) {
-    app.use('/native', createNativeRoutes(nativeSessionManager));
-    logger.info('Native HTTP routes mounted at /native');
-
-    // Native WebSocket attach endpoint
+    // Native WebSocket attach endpoint. Register before HTTP /native middleware so
+    // WebSocket auth is handled by the attach route rather than the HTTP router.
     if (orchestrator) {
       wsApp.app.ws(
         '/native/sessions/:id/attach',
@@ -285,6 +329,14 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
           if (!sessionId) {
             ws.close(4000, 'Session ID is required');
             return;
+          }
+
+          if (authToken) {
+            const expected = `Bearer ${authToken}`;
+            if (req.headers.authorization !== expected) {
+              ws.close(4001, 'Unauthorized');
+              return;
+            }
           }
 
           logger.info('WebSocket attach request', { sessionId });
@@ -387,19 +439,31 @@ export function createWakeupServer(config: WakeupServerConfig): Express {
         'Native WebSocket endpoint mounted at /native/sessions/:id/attach',
       );
     }
+
+    // Native chat API routes (HTTP)
+    app.use(
+      '/native',
+      ...authMiddleware,
+      createNativeRoutes(nativeSessionManager),
+    );
+    logger.info('Native HTTP routes mounted at /native');
   }
 
   return app;
 }
 
 export function startWakeupServer(
-  app: Express,
-  port: number = 3001,
+  config: WakeupServerConfig & { port: number },
 ): Promise<void> {
+  const app = createWakeupServer(config);
+  const host = config.host ?? '127.0.0.1';
+
   return new Promise((resolve) => {
-    app.listen(port, () => {
-      logger.info(`Wakeup server listening on port ${port}`);
+    const onListening = () => {
+      logger.info('Wakeup server listening', { port: config.port, host });
       resolve();
-    });
+    };
+
+    app.listen(config.port, host, onListening);
   });
 }
