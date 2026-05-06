@@ -59,6 +59,7 @@ export interface MessageOrchestrator {
   handleMessage(
     message: IncomingMessage,
     responder: PlatformResponder,
+    rawEvent?: unknown,
   ): Promise<void>;
 }
 
