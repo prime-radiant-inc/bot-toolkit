@@ -22,19 +22,21 @@ Live Scribble inspection confirmed the distinction:
 ## Goals
 
 - Make bot-toolkit's generated `CLAUDE.md` files safe and host-application-neutral for public npm release.
+- Make generated Markdown safe when room names, channel names, user display names, and IDs come from external platforms.
+- Preserve existing generated `CLAUDE.md` files unless an operator manually cleans them up.
 - Preserve Scribble's intentional cross-channel context behavior and current deployment/install shape.
 - Keep the package suitable for Scribble, sen, spec-together, and future consumers without baking in one app's memory policy.
-- Avoid any automatic rewrite of existing room-level `CLAUDE.md` files.
-- Give future implementers clear tests and release checks for the boundary.
+- Verify the built npm package artifact, not only source files.
 
 ## Non-Goals
 
 - Do not redesign Scribble's memory model.
 - Do not weaken or remove Scribble's current cross-channel awareness, global conversation search, or current-message attachment handling.
+- Do not change Scribble's `<background-context>` payload shape, source attribution, search defaults, Docker/deploy shape, or production data as part of this fix.
 - Do not add per-channel privacy controls.
 - Do not implement filesystem sandboxing or tool-level enforcement.
 - Do not migrate the current production Scribble data directory.
-- Do not overwrite room-specific `CLAUDE.md` files that operators may have edited.
+- Do not overwrite existing platform-level or room-level `CLAUDE.md` files that operators may have edited.
 - Do not make sen, spec-together, or future consumers adopt Scribble-specific prompt or storage policy.
 
 ## Design
@@ -68,13 +70,26 @@ The generated room-level template should also be made neutral for newly created 
 
 Bot-toolkit can keep legacy path helpers such as `repos` and `mcp-data` because they are public API/data-layout helpers, but generated prompt text must not present those paths as default readable context. Opt-in cross-room/admin tools such as task-listing tools should be documented as tool surfaces, not filesystem permissions.
 
-### 2. Keep Existing Room-Level Files Stable
+### 2. Escape Generated Markdown Metadata
 
-Room-level files may have been edited by operators. The implementation must not overwrite existing room-level files. This matches current behavior and protects hand-authored channel context.
+Room metadata can come from external platforms. Before writing generated Markdown, bot-toolkit must escape or constrain:
 
-If future work changes the default room-level template, it applies only to newly created rooms.
+- `channelId`
+- `channelName`
+- `userDisplayName`
+- any value derived from those fields for headings, inline code, or metadata lines
 
-### 3. No Production Migration
+This is separate from filesystem path sanitization. `sanitizeRoomId()` protects directory names; generated Markdown needs its own formatting/escaping so metadata cannot inject headings, lists, code fences, XML-ish tags, or instruction-looking text into durable `CLAUDE.md` files.
+
+The escaped output should remain readable. It does not need to preserve every Markdown character literally if replacing dangerous characters with spaces or escaped forms is simpler and clearer.
+
+### 3. Keep Existing Generated Files Stable
+
+Platform-level and room-level files may have been edited by operators. The implementation must not overwrite existing `rooms/<platform>/CLAUDE.md` or `rooms/<platform>/<room>/CLAUDE.md` files. This matches current behavior and protects hand-authored channel context.
+
+If future work changes default templates, it applies only to newly created platform indexes and newly created rooms.
+
+### 4. No Production Migration
 
 This spec does not require changing the current Scribble instance.
 
@@ -82,16 +97,16 @@ Production remains intentionally unchanged until an operator chooses manual clea
 
 If a future migration is needed, it must be conservative and only touch platform-level generated index files that match old-template markers such as `claude-pa` and `Read from other rooms' chat-history, repos, MCP data`.
 
-### 4. Scribble Clarification
+### 5. Minimal Scribble Clarification
 
-Scribble should keep its current behavior. The goal is not to make Scribble less capable because that sounds safer. The goal is to make Scribble-owned prompt/tool surfaces describe the behavior it already has, while removing generic bot-toolkit filesystem permission grants.
+Scribble should keep its current behavior. The goal is not to make Scribble less capable because that sounds safer. The goal is to make Scribble-owned prompt/tool/doc surfaces describe the behavior it already has, while removing generic bot-toolkit filesystem permission grants.
 
-Add a small clarification in Scribble documentation and runtime guidance:
+Add a small clarification in Scribble documentation and runtime tool/guidance text:
 
 - Cross-channel awareness comes from Scribble-provided `<background-context>` and `conversation_search`.
-- Slack history discovery should use `<background-context>` and `conversation_search`, not shell/filesystem reads of `DATA_DIRECTORY/conversations`, sibling `rooms`, old `chat-history` folders, Claude session files, or downloaded files from other conversations.
-- Claude may read attachment `localPath` values included in the current message, because Scribble intentionally downloads current-message attachments and passes those paths to Claude.
-- Claude should not explore other downloaded files unless the current Scribble prompt/tool context explicitly provides them.
+- The `conversation_search` tool should say that omitting `channel_id` performs global logged-conversation search.
+- `conversation_search` results should be used with relevance, attribution, and privacy judgment when referenced across channels.
+- Existing constitution language such as "perfect memory" should remain product-true but become source-precise: Scribble remembers through Scribble-provided context/tools for conversations where Scribble is present.
 - Current behavior remains unchanged: recent public-channel context and global conversation search continue to work as documented.
 
 The expected touchpoints are:
@@ -99,21 +114,27 @@ The expected touchpoints are:
 - `README.md`, in "What Scribble Reads and How Data Flows".
 - `src/constitution/base.ts`, in the constitution text near safety or tool-usage guidance.
 - `src/mcp/index.ts` or the relevant tool description source for `conversation_search`.
-- Existing tests for constitution rendering and documented cross-channel context, adjusted only as needed to pin the new wording.
+- Existing tests for constitution and MCP/tool wording, adjusted only as needed to pin the new wording.
+- If documentation around the temporary bot-toolkit package bridge is touched, update Scribble's `AGENTS.md` and `CLAUDE.md` in the same spirit. Otherwise, treat their broader cleanup as non-blocking.
 
-The `conversation_search` runtime tool description should say that omitting `channel_id` performs global logged-conversation search, and that results must not be carried across channels without clear relevance, attribution, and privacy judgment.
-
-Existing constitution language should remain product-true but become source-precise. Phrases such as "perfect memory" and proactive cross-channel references should be framed as memory from Scribble-provided context/tools for conversations where Scribble is present, not a license to inspect arbitrary filesystem state.
+Do not change `src/context/crossChannelContext.ts`, its payload shape, its source-path attribution, global `conversation_search` behavior, current-message attachment `localPath` handling, Docker/deploy shape, or production data in this pass. Those may be future product/security decisions, but they are not the bot-toolkit npm release blocker.
 
 This makes Scribble the authority for Scribble's memory policy without pushing app-specific policy into bot-toolkit. It also keeps the same installation/deployment behavior that currently works well.
 
-### 5. Npm And Transitional Tarball Validation
+### 6. Npm And Transitional Tarball Validation
 
-Publishing bot-toolkit to npm is part of why this work exists. After publish, Scribble should be able to consume `@primeradiant/bot-toolkit` from npm instead of a local `.tgz` bridge. That will remove much of the current local tarball and bridge-ref friction.
-
-Until the npm package is published, local tarball validation remains a pre-publish stand-in for the registry artifact. Treat it as transitional scaffolding, not a durable Scribble architecture.
+Publishing bot-toolkit to npm is part of why this work exists. After publish, Scribble should be able to consume `@primeradiant/bot-toolkit` from npm instead of a local `.tgz` bridge. That transition is useful, but it should not turn this prompt-boundary fix into a deployment rewrite.
 
 The durable release gate is: the exact package artifact that npm will publish must be clean. Source tests alone are not enough because `package.json` publishes `dist/`, README, LICENSE, and package metadata.
+
+Before npm publish, local tarball validation remains a pre-publish stand-in for the registry artifact. Treat it as transitional scaffolding, not a durable Scribble architecture.
+
+For Scribble validation, choose one explicit path:
+
+- Update Scribble's tarball lockfile/bridge refs to the cleaned packed artifact and validate the normal bridge path.
+- Or validate Scribble through a temporary install of the exact cleaned `npm pack` artifact and do not claim the normal Docker bridge path has been validated.
+
+After npm publish, move Scribble to the registry package before calling the Scribble standalone OSS install story final. That post-publish dependency transition can be a follow-up if it would expand this fix too far.
 
 ## Testing
 
@@ -130,14 +151,18 @@ Update `src/utils/__tests__/roomPath.test.ts` to assert that generated platform 
 - Do not say or imply reading other rooms is OK.
 - Do not call the room directory a sandbox.
 - Do not include all-room `grep` examples.
+- Escape or neutralize Markdown metadata injection in headings, metadata lines, and inline-code contexts.
+- Preserve existing platform-level and room-level `CLAUDE.md` files byte-for-byte.
 
 Run the normal bot-toolkit check suite and package validation:
 
 - `npm run check`
 - `npm pack --dry-run`
 - A real `npm pack` into a temporary location, followed by an unpacked artifact scan of the built generated-instruction code.
+- A clean temporary consumer install from the packed `.tgz`, with import/typecheck smoke coverage.
+- Dependency/audit output inspected for runtime issues; critical/high runtime vulnerabilities block release, while moderate findings require an explicit fix, upgrade, pin, or documented release exception.
 
-The artifact scan should fail if built generated-instruction templates still contain `read from other rooms`, `MCP data`, `mcp-data`, `repos/`, `infrastructure/`, `This is your sandbox`, or `grep` examples over `rooms/*/chat-history`. It should also fail if the packed artifact contains private references such as `claude-pa`. Do not make the scan fail on legitimate non-template text such as the README's "not a sandbox" security warning or legacy path-helper constants.
+The artifact scan should fail if generated-instruction templates in built `dist/` still contain `read from other rooms`, `MCP data`, `mcp-data`, `repos/`, `infrastructure/`, `This is your sandbox`, or `grep` examples over `rooms/*/chat-history`. Separately, the whole packed artifact should fail if it contains private references such as `claude-pa`. Do not make the template scan fail on legitimate non-template text such as the README's "not a sandbox" security warning, legacy path-helper constants, or bot-toolkit's non-prompt `chat-history` storage code.
 
 ### Scribble
 
@@ -147,9 +172,10 @@ Run the relevant Scribble checks for the touched files. At minimum, verify the c
 - `conversation_search` can search logged conversations.
 - Omitting `channel_id` from `conversation_search` means global logged-conversation search.
 - Runtime guidance says Slack history discovery comes from `<background-context>` and `conversation_search`.
-- Runtime guidance does not instruct filesystem discovery through `DATA_DIRECTORY/conversations`, sibling room directories, old `chat-history`, Claude session files, or other conversations' downloads.
 - Current-message attachment `localPath` values remain allowed.
 - The generated bot-toolkit room directories are not the policy surface for cross-channel memory.
+
+Use exact commands rather than a vague "check" script. For this scope, use targeted tests for touched constitution/MCP/docs behavior, then `npm test` and `npm run build:all` if Scribble code changes. If validating the normal tarball bridge, also run `npm run check:bridge`. If Docker/package/deploy shape changes, run a Docker build smoke; otherwise Docker is intentionally out of scope.
 
 When validating before npm publish, Scribble may temporarily install the locally packed bot-toolkit artifact. When validating after npm publish, prefer installing the actual npm version. In either case, verify Scribble is exercising the cleaned package artifact rather than stale source, stale `dist/`, or an old local `.tgz`.
 
@@ -164,10 +190,12 @@ For the initial npm release, include this in the package release notes or README
 ## Acceptance Criteria
 
 - New bot-toolkit-generated platform index files and room-level files are host-application-neutral.
+- New bot-toolkit-generated Markdown escapes external metadata safely.
 - No generated text references private Prime Radiant internals.
 - No generated text grants default cross-room read access.
 - Packed npm artifact contents are scanned and clean.
-- Room-level files are not overwritten.
+- Existing platform-level and room-level generated files are not overwritten.
 - Scribble's documented cross-channel memory behavior remains intact.
 - Scribble's runtime guidance preserves current-message attachment reads and current cross-channel/search behavior.
+- Scribble `crossChannelContext`, global `conversation_search`, Docker/deploy shape, and production data are unchanged unless a later explicit product/security decision says otherwise.
 - Existing Scribble production data is not migrated by this work.
