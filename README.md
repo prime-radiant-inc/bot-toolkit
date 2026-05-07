@@ -1,8 +1,8 @@
-# @primeradiant/bot-toolkit
+# @primeradianthq/bot-toolkit
 
 Reusable TypeScript core for building unattended Claude-powered chat agents.
 
-`@primeradiant/bot-toolkit` provides shared bot infrastructure: session storage,
+`@primeradianthq/bot-toolkit` provides shared bot infrastructure: session storage,
 Claude session management, per-room workspaces, wakeups, logging, config/secrets
 loading, responder base classes, adapter base classes, attention tracking, task
 tracking, and native chat route primitives.
@@ -14,14 +14,14 @@ own their platform adapters and compose them with `BaseAdapter`,
 ## Install
 
 ```bash
-npm install @primeradiant/bot-toolkit
+npm install @primeradianthq/bot-toolkit
 ```
 
 For local validation before npm publication:
 
 ```bash
 npm pack
-npm install ./primeradiant-bot-toolkit-0.1.0.tgz
+npm install ./primeradianthq-bot-toolkit-0.1.0.tgz
 ```
 
 ## Public Surface
@@ -43,7 +43,7 @@ import {
   type PlatformResponder,
   type SessionCallbacks,
   type WakeupPayload,
-} from '@primeradiant/bot-toolkit';
+} from '@primeradianthq/bot-toolkit';
 ```
 
 ## Platform Identifiers
@@ -71,7 +71,7 @@ import {
   TaskRegistry,
   createTaskToolsServer,
   loadConfig,
-} from '@primeradiant/bot-toolkit';
+} from '@primeradianthq/bot-toolkit';
 
 const config = loadConfig();
 const database = new SessionDatabase(config.database.path);
@@ -92,7 +92,7 @@ import {
   BaseAdapter,
   type BaseAdapterConfig,
   type WakeupPayload,
-} from '@primeradiant/bot-toolkit';
+} from '@primeradianthq/bot-toolkit';
 
 export interface ApplicationAdapterConfig extends BaseAdapterConfig {
   token: string;
