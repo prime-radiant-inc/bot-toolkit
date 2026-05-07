@@ -21,7 +21,7 @@ For local validation before npm publication:
 
 ```bash
 npm pack
-npm install ./primeradianthq-bot-toolkit-0.1.0.tgz
+npm install ./primeradianthq-bot-toolkit-1.0.0.tgz
 ```
 
 ## Public Surface
