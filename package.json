@@ -27,6 +27,7 @@
     "build": "tsc",
     "prepack": "npm run build && npm run check:public-types",
     "pack:dry-run": "npm pack --dry-run",
+    "pack:verify": "node scripts/check-packed-artifact.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run pack:dry-run"
   },
   "keywords": [
@@ -53,7 +54,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.0",
+    "@anthropic-ai/claude-agent-sdk": "0.2.86",
     "@aws-sdk/client-ssm": "^3.971.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/express": "^5.0.0",

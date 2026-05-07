@@ -19,8 +19,7 @@ interface TimezoneResult {
   configured: boolean;
 }
 
-// NOTE: This timezone validation logic is also in claude-pa-scheduler/src/mcp.ts
-// If updating, consider updating both (or consolidating in future)
+// Keep this validation aligned with any scheduler or MCP surfaces that accept user timezone input.
 // Abbreviations that Intl accepts but don't handle DST correctly or are ambiguous
 // BST = Bangladesh Standard Time (NOT British Summer Time!)
 // IST = India Standard Time (NOT Irish Standard Time or Israel Standard Time!)

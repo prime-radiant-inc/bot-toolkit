@@ -64,6 +64,48 @@ function sanitizeRoomIdOrThrow(roomId: string): string {
   return sanitized;
 }
 
+function normalizeMarkdownScalar(
+  value: string | undefined,
+  fallback: string,
+): string {
+  const withoutControls = Array.from(value ?? '', (char) => {
+    const codePoint = char.codePointAt(0);
+    return codePoint !== undefined && (codePoint < 32 || codePoint === 127)
+      ? ' '
+      : char;
+  }).join('');
+
+  const normalized = withoutControls
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160)
+    .trim();
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function escapeMarkdownText(value: string, fallback = 'Unknown'): string {
+  return normalizeMarkdownScalar(value, fallback)
+    .replace(/\\/g, '\\\\')
+    .replace(/[!"#$%&'()*+,\-./:;=?@[\\\]^_`{|}~]/g, '\\$&')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatInlineCodeValue(value: string, fallback = 'unknown'): string {
+  const code = normalizeMarkdownScalar(value, fallback)
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const longestBacktickRun = Math.max(
+    0,
+    ...Array.from(code.matchAll(/`+/g), (match) => match[0].length),
+  );
+  const delimiter = '`'.repeat(longestBacktickRun + 1);
+  const padding = code.startsWith('`') || code.endsWith('`') ? ' ' : '';
+
+  return `${delimiter}${padding}${code}${padding}${delimiter}`;
+}
+
 /**
  * Get the directory path for a room's Claude sessions.
  * Creates the directory and CLAUDE.md if they don't exist.
@@ -119,7 +161,8 @@ export function getRoomDirectory(
 
 /**
  * Create a CLAUDE.md index file for the rooms/ directory.
- * Explains the directory structure and how to search chat history.
+ * Explains host-neutral room workspace behavior without granting access outside
+ * the active room directory.
  */
 function createRoomsIndexClaudeMd(roomsDir: string, platform: Platform): void {
   const claudeMdPath = path.join(roomsDir, 'CLAUDE.md');
@@ -156,15 +199,9 @@ function createRoomsIndexClaudeMd(roomsDir: string, platform: Platform): void {
 
 This directory contains per-room workspaces for ${platformDescription}.
 
-**This is your sandbox.** You can freely create files and directories within your room.
+Claude normally runs from an individual room directory. Use the current room directory for files related to that conversation. This generated file does not grant permission to read or write other room directories.
 
-## Write Boundaries
-
-- **OK**: Write anywhere in your current room directory
-- **OK**: Read from other rooms' chat-history, repos, MCP data
-- **NOT OK**: Write to other rooms, infrastructure/, mcp-data/, repos/ (without telling the user)
-
-See the main CLAUDE.md in claude-pa for full details on the data directory structure.
+The host application should provide cross-room or cross-channel context through its own system prompt and tools.
 
 ## Directory Structure
 
@@ -172,10 +209,7 @@ See the main CLAUDE.md in claude-pa for full details on the data directory struc
 rooms/
 ├── CLAUDE.md              # This file
 ├── <room-id-1>/
-│   ├── CLAUDE.md          # Room-specific context and instructions
-│   └── chat-history/
-│       └── YYYY-MM-DD/    # Daily directories
-│           └── HH-mm-<thread-id>.md  # Per-thread logs
+│   └── CLAUDE.md          # Room-specific context and instructions
 └── ...
 \`\`\`
 
@@ -183,38 +217,9 @@ rooms/
 
 ${idExample} for filesystem safety.
 
-## Chat History
+## Conversation History
 
-Each room's \`chat-history/\` directory contains per-thread markdown files organized by date.
-
-### Searching Chat History
-
-\`\`\`bash
-# Search all rooms for a topic
-grep -r "search term" rooms/*/chat-history/
-
-# Search a specific room
-grep -r "search term" rooms/<room-id>/chat-history/
-
-# Find conversations from a specific date
-ls rooms/*/chat-history/2024-01-15/
-\`\`\`
-
-### Chat History Format
-
-\`\`\`markdown
-### 14:32 **User**
-
-Message content here...
-
----
-
-### 14:33 **Assistant**
-
-Response content here...
-
----
-\`\`\`
+The host application may provide conversation history through prompts, tools, or application-specific storage.
 
 ## Room Context
 
@@ -316,9 +321,15 @@ function createRoomClaudeMd(roomDir: string, info: RoomInfo): void {
   if (info.platform === 'native') {
     title = 'Native Chat Session';
   } else if (info.channelType === 'dm' && info.userDisplayName) {
-    title = `${platformLabel} DM with ${info.userDisplayName}`;
+    title = `${platformLabel} DM with ${escapeMarkdownText(
+      info.userDisplayName,
+      'Unknown User',
+    )}`;
   } else if (info.channelName && info.channelName !== info.channelId) {
-    title = `${platformLabel}: #${info.channelName}`;
+    title = `${platformLabel}: #${escapeMarkdownText(
+      info.channelName,
+      'unknown-channel',
+    )}`;
   } else {
     title = `${platformLabel} Channel`;
   }
@@ -326,11 +337,13 @@ function createRoomClaudeMd(roomDir: string, info: RoomInfo): void {
   // Build metadata section
   const metadataLines = [
     `Platform: ${platformLabel}`,
-    `Channel ID: \`${info.channelId}\``,
+    `Channel ID: ${formatInlineCodeValue(info.channelId)}`,
   ];
 
   if (info.channelName && info.channelName !== info.channelId) {
-    metadataLines.push(`Channel Name: ${info.channelName}`);
+    metadataLines.push(
+      `Channel Name: ${escapeMarkdownText(info.channelName, 'Unknown')}`,
+    );
   }
 
   if (info.channelType) {
@@ -340,7 +353,9 @@ function createRoomClaudeMd(roomDir: string, info: RoomInfo): void {
   }
 
   if (info.userDisplayName) {
-    metadataLines.push(`User: ${info.userDisplayName}`);
+    metadataLines.push(
+      `User: ${escapeMarkdownText(info.userDisplayName, 'Unknown User')}`,
+    );
   }
 
   metadataLines.push(`Created: ${createdAt}`);
@@ -357,7 +372,7 @@ Use this interface to:
 - Develop and test new functionality
 
 Commands:
-- \`/new <topic>\` - Start a new conversation thread`;
+- \`/new &lt;topic&gt;\` - Start a new conversation thread`;
   } else {
     purposeSection = "<!-- Describe this room's purpose -->";
   }
@@ -374,9 +389,9 @@ ${purposeSection}
 
 <!-- Add any room-specific context or instructions for Claude -->
 
-## Chat History
+## Conversation History
 
-Historical chat messages are stored in the \`chat-history/\` directory, organized by date and thread.
+The host application may provide conversation history through prompts, tools, or application-specific storage. This generated room file does not grant additional filesystem access.
 `;
 
   fs.writeFileSync(claudeMdPath, template);
