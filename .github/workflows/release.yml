@@ -30,4 +30,4 @@ jobs:
           PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
           test "v${PACKAGE_VERSION}" = "${GITHUB_REF_NAME}"
 
-      - run: npm publish --access public
+      - run: npm publish --access public --provenance
