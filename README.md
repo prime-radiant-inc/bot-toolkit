@@ -20,9 +20,25 @@ npm install @primeradianthq/bot-toolkit
 For local validation before npm publication:
 
 ```bash
-npm pack
-npm install ./primeradianthq-bot-toolkit-1.0.0.tgz
+TARBALL=$(npm pack --silent)
+npm install "./$TARBALL"
 ```
+
+## Requirements and Configuration
+
+This package requires Node.js 20 or newer.
+
+`loadConfig()` reads these optional environment variables:
+
+- `DATABASE_PATH`: SQLite database path. Defaults to
+  `./data/infrastructure/sessions.db`.
+- `DATA_DIRECTORY`: persistent data root for room directories and related
+  files. Defaults to the grandparent directory of `DATABASE_PATH`.
+- `CONFIG_DIR`: directory containing `instance.json` and `secrets.json`.
+  Defaults to `~/etc/sen`.
+- `CLAUDE_PA_DIR`: application root passed through to Claude session setup.
+- `TZ`: runtime timezone. Defaults to `America/Los_Angeles`.
+- `USE_AGENT_SDK`: set to `false` to use CLI mode instead of Agent SDK mode.
 
 ## Public Surface
 

@@ -1,6 +1,6 @@
 {
   "name": "@primeradianthq/bot-toolkit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Reusable TypeScript core for building unattended Claude-powered chat agents.",
   "type": "module",
   "main": "dist/index.js",
