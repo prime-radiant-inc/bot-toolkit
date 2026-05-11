@@ -13,6 +13,14 @@ export interface Config {
   dataDirectory: string; // Base directory for persistent data (room directories, etc.)
   timezone: string;
   useAgentSDK: boolean; // Feature flag: use Agent SDK instead of CLI spawning
+  /** Controls the Claude Agent SDK's auto-memory feature.
+   *  - 'enabled' (default) preserves current SDK behavior.
+   *  - 'disabled' sets CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 in the SDK subprocess
+   *    env, removing the system-prompt memory section and the memory-write gate.
+   *  Multi-tenant bots with their own memory architecture (wiki, learned
+   *  behaviors) should set this to 'disabled'. Single-tenant per-user bots can
+   *  leave it enabled. */
+  autoMemory?: 'enabled' | 'disabled';
 }
 
 export function loadConfig(): Config {
