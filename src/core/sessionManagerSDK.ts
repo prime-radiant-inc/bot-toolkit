@@ -50,9 +50,16 @@ const SDK_ENV_ALLOWLIST = [
   'CLAUDE_CODE_OAUTH_TOKEN',
 ] as const;
 
+export interface BuildSdkEnvOptions {
+  /** When 'disabled', sets CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 in the returned env.
+   *  When 'enabled' or absent, the env var is not set. */
+  autoMemory?: 'enabled' | 'disabled';
+}
+
 export function buildSdkEnv(
   sourceEnv: NodeJS.ProcessEnv,
   platformEnv: Record<string, string>,
+  options: BuildSdkEnvOptions = {},
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
@@ -63,11 +70,17 @@ export function buildSdkEnv(
     }
   }
 
-  return {
+  const result: Record<string, string> = {
     ...env,
     ...platformEnv,
     DEBUG_CLAUDE_AGENT_SDK: 'true',
   };
+
+  if (options.autoMemory === 'disabled') {
+    result.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
+  }
+
+  return result;
 }
 
 /**
