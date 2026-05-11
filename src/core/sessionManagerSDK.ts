@@ -220,7 +220,9 @@ export class ClaudeSessionManagerSDK implements ISessionManager {
       // Required for skill discovery from ~/.claude/skills/ (personal skills)
       settingSources: ['user', 'project'],
       includePartialMessages: true,
-      env: buildSdkEnv(process.env, platformEnv, { autoMemory: this.config.autoMemory }),
+      env: buildSdkEnv(process.env, platformEnv, {
+        autoMemory: this.config.autoMemory,
+      }),
       // Capture stderr from Claude Code process for debugging
       stderr: (message: string) => {
         const level = parseStderrLogLevel(message);
